@@ -233,51 +233,32 @@ view :: proc(model: Model, buf: ^strings.Builder) {
 
 	// Section 3: Use case examples
 	examples_y := demo_y + 12
-	munin.print_at(buf, {2, examples_y}, "Common Use Cases:", .BrightWhite)
+	// Only show use cases if we have enough space
+	if examples_y + 4 < term_height - 8 {
+		munin.print_at(buf, {2, examples_y}, "Common Use Cases:", .BrightWhite)
 
-	// Loading example
-	comp.draw_spinner(
-		buf,
-		{4, examples_y + 2},
-		model.frame,
-		.Dots,
-		.BrightGreen,
-		"Loading...",
-		model.direction,
-	)
+		// Loading example
+		comp.draw_spinner(
+			buf,
+			{4, examples_y + 2},
+			model.frame,
+			.Dots,
+			.BrightGreen,
+			"Loading...",
+			model.direction,
+		)
 
-	// Processing example
-	comp.draw_spinner(
-		buf,
-		{4, examples_y + 3},
-		model.frame,
-		.Circle,
-		.BrightYellow,
-		"Processing data...",
-		model.direction,
-	)
-
-	// Waiting example
-	comp.draw_spinner(
-		buf,
-		{4, examples_y + 4},
-		model.frame,
-		.Arrow,
-		.BrightMagenta,
-		"Waiting for response...",
-		model.direction,
-	)
-
-	// Downloading example
-	comp.draw_spinner(
-		buf,
-		{4, examples_y + 5},
-		model.frame,
-		.Box,
-		.BrightCyan,
-		"Downloading files...",
-		model.direction,
-	)
+		// Processing example
+		comp.draw_spinner(
+			buf,
+			{4, examples_y + 3},
+			model.frame,
+			.Circle,
+			.BrightYellow,
+			"Processing data...",
+			model.direction,
+		)
+	}
 
 	// Instructions at bottom
 	instructions_y := term_height - 6
