@@ -111,6 +111,9 @@ odin build example/counter -out:counter
 ./counter
 ```
 
+## Output
+<img src="./example/counter/counter.gif" alt="Counter Example" width="600">
+
 ## Core Concepts
 
 ### The Elm Architecture
