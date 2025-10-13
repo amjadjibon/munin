@@ -24,6 +24,7 @@ Key :: enum {
 Key_Event :: struct {
 	key:  Key,
 	char: rune,
+	shift: bool,
 }
 
 read_key :: proc() -> Maybe(Key_Event) {
@@ -43,10 +44,12 @@ read_key :: proc() -> Maybe(Key_Event) {
 		if event.EventType == win32.KEY_EVENT && event.Event.KeyEvent.bKeyDown {
 			vk := event.Event.KeyEvent.wVirtualKeyCode
 			ch := event.Event.KeyEvent.uChar.UnicodeChar
+			shift_key_state := event.Event.KeyEvent.dwControlKeyState & win32.SHIFT_PRESSED != 0
 
 			result := Key_Event {
 				key  = .Char,
 				char = rune(ch),
+				shift = shift_key_state,
 			}
 
 			switch vk {
@@ -70,8 +73,8 @@ read_key :: proc() -> Maybe(Key_Event) {
 
 			return result
 		}
-	} else {
-		buf: [3]byte
+} else {
+		buf: [4]byte  // Increased to handle Shift+Tab (ESC [ Z)
 		n, err := os.read(os.stdin, buf[:])
 
 		if err != nil || n == 0 {
@@ -81,22 +84,31 @@ read_key :: proc() -> Maybe(Key_Event) {
 		result := Key_Event {
 			key  = .Char,
 			char = rune(buf[0]),
+			shift = false,
 		}
 
+		
 		// Handle escape sequences
 		if buf[0] == 27 && n > 1 { 	// ESC
-			if buf[1] == '[' && n == 3 {
-				switch buf[2] {
-				case 'A':
-					result.key = .Up
-				case 'B':
-					result.key = .Down
-				case 'C':
-					result.key = .Right
-				case 'D':
-					result.key = .Left
+			if buf[1] == '[' {
+				if n == 3 {
+					switch buf[2] {
+					case 'A':
+						result.key = .Up
+					case 'B':
+						result.key = .Down
+					case 'C':
+						result.key = .Right
+					case 'D':
+						result.key = .Left
+					}
+					return result
+				} else if n == 4 && buf[2] == 'Z' {
+					// Shift+Tab combination: ESC [ Z
+					result.key = .Tab
+					result.shift = true
+					return result
 				}
-				return result
 			}
 			result.key = .Escape
 			return result
