@@ -19,6 +19,8 @@ Key :: enum {
 	Escape,
 	Backspace,
 	Tab,
+	PageUp,
+	PageDown,
 }
 
 Key_Event :: struct {
@@ -69,12 +71,16 @@ read_key :: proc() -> Maybe(Key_Event) {
 				result.key = .Backspace
 			case win32.VK_TAB:
 				result.key = .Tab
+			case win32.VK_PRIOR:
+				result.key = .PageUp
+			case win32.VK_NEXT:
+				result.key = .PageDown
 			}
 
 			return result
 		}
 } else {
-		buf: [4]byte  // Increased to handle Shift+Tab (ESC [ Z)
+		buf: [6]byte  // Increased to handle Page Up/Down (ESC [ 5 ~ / ESC [ 6 ~)
 		n, err := os.read(os.stdin, buf[:])
 
 		if err != nil || n == 0 {
@@ -107,6 +113,14 @@ read_key :: proc() -> Maybe(Key_Event) {
 					// Shift+Tab combination: ESC [ Z
 					result.key = .Tab
 					result.shift = true
+					return result
+				} else if n == 5 && buf[2] == '5' && buf[3] == '~' {
+					// Page Up: ESC [ 5 ~
+					result.key = .PageUp
+					return result
+				} else if n == 5 && buf[2] == '6' && buf[3] == '~' {
+					// Page Down: ESC [ 6 ~
+					result.key = .PageDown
 					return result
 				}
 			}
