@@ -117,6 +117,6 @@ draw_label_value :: proc(
 	separator: string = ": ",
 ) {
 	munin.print_at(buf, pos, label, label_color)
-	munin.print_at(buf, x + len(label), y, separator, .BrightBlue)
-	munin.print_at(buf, x + len(label) + len(separator), y, value, value_color)
+	munin.print_at(buf, {pos.x + len(label), pos.y}, separator, .BrightBlue)
+	munin.print_at(buf, {pos.x + len(label) + len(separator), pos.y}, value, value_color)
 }
