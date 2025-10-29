@@ -70,7 +70,9 @@ set_raw_mode :: proc() -> (Terminal_State, bool) {
 			return state, false
 		}
 
+		// Enable mouse input in addition to raw mode
 		new_mode := state.old_mode & ~(win32.ENABLE_LINE_INPUT | win32.ENABLE_ECHO_INPUT)
+		new_mode |= win32.ENABLE_MOUSE_INPUT | win32.ENABLE_EXTENDED_FLAGS
 		if !win32.SetConsoleMode(stdin, new_mode) {
 			return state, false
 		}

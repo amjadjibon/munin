@@ -117,6 +117,14 @@ run :: proc(
 	fmt.print("\x1b[?7l")
 	defer fmt.print("\x1b[?7h")
 
+	// Enable mouse tracking (SGR mode with all events)
+	// ?1000 = Enable mouse tracking (button press/release)
+	// ?1002 = Enable button event tracking (drag)
+	// ?1003 = Enable all motion tracking (including hover)
+	// ?1006 = Enable SGR extended mouse mode
+	fmt.print("\x1b[?1000h\x1b[?1002h\x1b[?1003h\x1b[?1006h")
+	defer fmt.print("\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1006l")
+
 	// Setup window resize detection
 	setup_resize_handler()
 
