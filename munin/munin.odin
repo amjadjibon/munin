@@ -18,10 +18,17 @@ when ODIN_OS != .Windows {
 // CORE TYPES
 // ============================================================
 
+// Screen mode for the terminal
+Screen_Mode :: enum {
+	Fullscreen, // Alternative screen buffer (default)
+	Inline,     // Normal inline mode
+}
+
 // Program represents a TUI application
 Program :: struct($Model, $Msg: typeid) {
 	model:         Model,
 	running:       bool,
+	screen_mode:   Screen_Mode,
 	init:          proc() -> Model,
 	update:        proc(msg: Msg, model: Model) -> (Model, bool),
 	view:          proc(model: Model, buf: ^strings.Builder),
@@ -52,6 +59,7 @@ make_program_without_subs :: proc(
 	return Program(Model, Msg) {
 		model = init(),
 		running = true,
+		screen_mode = .Fullscreen,
 		init = init,
 		update = update,
 		view = view,
@@ -74,6 +82,7 @@ make_program_with_subs :: proc(
 	return Program(Model, Msg) {
 		model = init(),
 		running = true,
+		screen_mode = .Fullscreen,
 		init = init,
 		update = update,
 		view = view,
@@ -81,6 +90,31 @@ make_program_with_subs :: proc(
 		buffer = buffer,
 		allocator = allocator,
 	}
+}
+
+// ============================================================
+// SCREEN MODE CONTROL
+// ============================================================
+
+// Toggle between fullscreen and inline mode
+toggle_screen_mode :: proc(program: ^Program($Model, $Msg)) {
+	if program.screen_mode == .Fullscreen {
+		// Switch to inline mode
+		fmt.print("\x1b[?1049l") // Disable alternative screen
+		program.screen_mode = .Inline
+	} else {
+		// Switch to fullscreen mode
+		fmt.print("\x1b[?1049h") // Enable alternative screen
+		program.screen_mode = .Fullscreen
+	}
+}
+
+// Set screen mode explicitly
+set_screen_mode :: proc(program: ^Program($Model, $Msg), mode: Screen_Mode) {
+	if program.screen_mode == mode {
+		return
+	}
+	toggle_screen_mode(program)
 }
 
 // ============================================================
@@ -92,7 +126,11 @@ run :: proc(
 	program: ^Program($Model, $Msg),
 	input_handler: proc() -> Maybe(Msg),
 	target_fps: i64 = 60,
+	initial_mode: Screen_Mode = .Fullscreen,
 ) {
+	// Set initial screen mode
+	program.screen_mode = initial_mode
+
 	// Set up terminal
 	state, ok := set_raw_mode()
 	if !ok {
@@ -105,9 +143,11 @@ run :: proc(
 	// Use the program's allocator for the remainder of execution
 	context.allocator = program.allocator
 
-	// Enable alternative screen buffer
-	fmt.print("\x1b[?1049h")
-	defer fmt.print("\x1b[?1049l")
+	// Enable alternative screen buffer (only if fullscreen mode)
+	if program.screen_mode == .Fullscreen {
+		fmt.print("\x1b[?1049h")
+		defer fmt.print("\x1b[?1049l")
+	}
 
 	// Hide cursor
 	fmt.print("\x1b[?25l")
