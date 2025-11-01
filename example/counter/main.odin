@@ -44,8 +44,7 @@ update :: proc(msg: Msg, model: Model) -> (Model, bool) {
 // 4. Define your View function
 view :: proc(model: Model, buf: ^strings.Builder) {
 	munin.clear_screen(buf)
-	munin.print_at(buf, {2, 2}, fmt.tprintf("Counter: "), .BrightGreen)
-	munin.print_at(buf, {11, 2}, fmt.tprintf("%d", model.counter), .BrightRed)
+	munin.print_at(buf, {2, 2}, fmt.tprintf("Counter: %d", model.counter), .BrightCyan)
 	munin.print_at(buf, {2, 4}, "Press space to increment, d to decrement, q to quit", .White)
 }
 
