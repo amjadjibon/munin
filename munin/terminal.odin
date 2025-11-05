@@ -21,7 +21,7 @@ when ODIN_OS != .Windows {
 	@(default_calling_convention = "c")
 	foreign libc {
 		ioctl :: proc(fd: c.int, request: c.ulong, #c_vararg args: ..any) -> c.int ---
-		signal :: proc(sig: c.int, handler: proc "c" (c.int)) -> proc "c" (c.int) ---
+		signal :: proc(sig: c.int, handler: proc "c" (_: c.int)) -> proc "c" (_: c.int) ---
 	}
 }
 
