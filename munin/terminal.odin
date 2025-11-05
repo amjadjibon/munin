@@ -31,6 +31,14 @@ when ODIN_OS != .Windows {
 @(private)
 window_resized_atomic: sync.Atomic_Int = {}
 
+// Cached window size (to avoid repeated ioctl/syscalls)
+@(private)
+cached_window_width: int = 0
+@(private)
+cached_window_height: int = 0
+@(private)
+cache_valid: bool = false
+
 // Signal handler for SIGWINCH (window resize)
 when ODIN_OS != .Windows {
 	@(private)
@@ -128,7 +136,14 @@ restore_mode :: proc(state: Terminal_State) {
 // ============================================================
 
 // Get the terminal window size (columns, rows)
+// This function caches the result and only queries the system on first call or after resize
 get_window_size :: proc() -> (width, height: int, ok: bool) {
+	// Return cached value if valid
+	if cache_valid {
+		return cached_window_width, cached_window_height, true
+	}
+
+	// Query system for window size
 	when ODIN_OS == .Windows {
 		stdout := win32.GetStdHandle(win32.STD_OUTPUT_HANDLE)
 		info: win32.CONSOLE_SCREEN_BUFFER_INFO
@@ -139,7 +154,6 @@ get_window_size :: proc() -> (width, height: int, ok: bool) {
 
 		width = int(info.srWindow.Right - info.srWindow.Left + 1)
 		height = int(info.srWindow.Bottom - info.srWindow.Top + 1)
-		return width, height, true
 	} else {
 		// Use TIOCGWINSZ ioctl to get window size
 		ws: winsize
@@ -150,17 +164,31 @@ get_window_size :: proc() -> (width, height: int, ok: bool) {
 
 		width = int(ws.ws_col)
 		height = int(ws.ws_row)
-		return width, height, true
 	}
+
+	// Cache the result
+	cached_window_width = width
+	cached_window_height = height
+	cache_valid = true
+
+	return width, height, true
 }
 
 // Check if window was resized and clear the flag
+// Also invalidates the window size cache if a resize was detected
 check_window_resized :: proc() -> bool {
 	when ODIN_OS != .Windows {
 		// Atomically exchange the flag with 0 (false) and return previous value
 		// This is thread-safe: if signal handler sets it to 1, we'll detect it exactly once
 		previous := sync.atomic_exchange(&window_resized_atomic, 0)
-		return previous != 0
+		was_resized := previous != 0
+
+		// Invalidate cache on resize
+		if was_resized {
+			cache_valid = false
+		}
+
+		return was_resized
 	}
 	return false
 }

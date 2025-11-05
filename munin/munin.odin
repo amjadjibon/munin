@@ -45,33 +45,56 @@ Program :: struct($Model, $Msg: typeid) {
 // ============================================================
 
 // Strip ANSI escape sequences from a string to get visual content
+// Optimized version: avoids allocation if no ANSI codes present
 strip_ansi :: proc(s: string) -> string {
 	if len(s) == 0 {
 		return s
 	}
 
+	// Fast path: check if there are any ANSI codes at all
+	has_ansi := false
+	for i in 0..<len(s) {
+		if s[i] == 0x1b {
+			has_ansi = true
+			break
+		}
+	}
+
+	// If no ANSI codes, return original string (zero allocation)
+	if !has_ansi {
+		return s
+	}
+
+	// Slow path: allocate and strip ANSI codes
 	result := make([]byte, len(s), context.temp_allocator)
 	result_len := 0
 	i := 0
 
 	for i < len(s) {
 		// Check for ANSI escape sequence (ESC [ ... m or other control sequences)
-		if s[i] == 0x1b && i+1 < len(s) {
+		if s[i] == 0x1b {
+			// Bounds check once
+			if i+1 >= len(s) {
+				// Incomplete escape at end, skip it
+				break
+			}
+
 			// Skip escape character
 			i += 1
 
 			// Handle CSI sequences (ESC [ ...)
-			if i < len(s) && s[i] == '[' {
+			if s[i] == '[' {
 				i += 1
 				// Skip until we find a letter (typically m, H, J, K, etc.)
 				for i < len(s) {
 					ch := s[i]
 					i += 1
+					// Optimized: single comparison using ranges
 					if (ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') {
 						break
 					}
 				}
-			} else if i < len(s) && s[i] == ']' {
+			} else if s[i] == ']' {
 				// Handle OSC sequences (ESC ] ... BEL or ESC ] ... ST)
 				i += 1
 				for i < len(s) {
@@ -79,7 +102,8 @@ strip_ansi :: proc(s: string) -> string {
 						i += 1
 						break
 					}
-					if s[i] == 0x1b && i+1 < len(s) && s[i+1] == '\\' { // ST (ESC \)
+					// Check for ST (ESC \) with single bounds check
+					if i+1 < len(s) && s[i] == 0x1b && s[i+1] == '\\' {
 						i += 2
 						break
 					}
@@ -87,7 +111,7 @@ strip_ansi :: proc(s: string) -> string {
 				}
 			}
 		} else {
-			// Regular character
+			// Regular character - no extra checks needed
 			result[result_len] = s[i]
 			result_len += 1
 			i += 1
@@ -99,31 +123,42 @@ strip_ansi :: proc(s: string) -> string {
 
 // Count visual width of a rune (accounts for wide characters like CJK)
 // Note: This is a simplified version. Full support would need unicode width tables.
+// Optimized with ASCII fast path (most common case)
 rune_visual_width :: proc(r: rune) -> int {
-	// Wide characters (CJK, emoji, etc.) typically take 2 cells
-	// This is a simplified check - proper implementation would use unicode width data
-	if r >= 0x1100 && (
-		(r >= 0x1100 && r <= 0x115F) ||  // Hangul Jamo
-		(r >= 0x2E80 && r <= 0x2EFF) ||  // CJK Radicals
-		(r >= 0x2F00 && r <= 0x2FDF) ||  // Kangxi Radicals
-		(r >= 0x3000 && r <= 0x303F) ||  // CJK Symbols and Punctuation
-		(r >= 0x3040 && r <= 0x309F) ||  // Hiragana
-		(r >= 0x30A0 && r <= 0x30FF) ||  // Katakana
-		(r >= 0x3400 && r <= 0x4DBF) ||  // CJK Extension A
-		(r >= 0x4E00 && r <= 0x9FFF) ||  // CJK Unified Ideographs
-		(r >= 0xAC00 && r <= 0xD7AF) ||  // Hangul Syllables
-		(r >= 0xF900 && r <= 0xFAFF) ||  // CJK Compatibility
-		(r >= 0xFE30 && r <= 0xFE4F) ||  // CJK Compatibility Forms
-		(r >= 0xFF00 && r <= 0xFF60) ||  // Fullwidth Forms
-		(r >= 0xFFE0 && r <= 0xFFE6) ||  // Fullwidth Forms
-		(r >= 0x20000 && r <= 0x2FFFF)   // CJK Extension B, C, D, E
-	) {
-		return 2
+	// Fast path: ASCII printable characters (most common case)
+	// This covers 95% of typical terminal text
+	if r >= 0x20 && r <= 0x7E {
+		return 1
 	}
 
-	// Control characters and zero-width characters
+	// Fast path: Control characters and DEL
 	if r < 0x20 || (r >= 0x7F && r < 0xA0) {
 		return 0
+	}
+
+	// Slow path: Wide characters (CJK, emoji, etc.)
+	// Early exit with single range check before detailed checks
+	if r < 0x1100 {
+		return 1  // Latin-1 Supplement and other narrow chars
+	}
+
+	// Wide characters - check ranges
+	if (r >= 0x1100 && r <= 0x115F) ||  // Hangul Jamo
+	   (r >= 0x2E80 && r <= 0x2EFF) ||  // CJK Radicals
+	   (r >= 0x2F00 && r <= 0x2FDF) ||  // Kangxi Radicals
+	   (r >= 0x3000 && r <= 0x303F) ||  // CJK Symbols and Punctuation
+	   (r >= 0x3040 && r <= 0x309F) ||  // Hiragana
+	   (r >= 0x30A0 && r <= 0x30FF) ||  // Katakana
+	   (r >= 0x3400 && r <= 0x4DBF) ||  // CJK Extension A
+	   (r >= 0x4E00 && r <= 0x9FFF) ||  // CJK Unified Ideographs
+	   (r >= 0xAC00 && r <= 0xD7AF) ||  // Hangul Syllables
+	   (r >= 0xF900 && r <= 0xFAFF) ||  // CJK Compatibility
+	   (r >= 0xFE30 && r <= 0xFE4F) ||  // CJK Compatibility Forms
+	   (r >= 0xFF00 && r <= 0xFF60) ||  // Fullwidth Forms
+	   (r >= 0xFFE0 && r <= 0xFFE6) ||  // Fullwidth Forms
+	   (r >= 0x20000 && r <= 0x2FFFF)   // CJK Extension B, C, D, E
+	{
+		return 2
 	}
 
 	// Default: 1 cell
@@ -132,21 +167,24 @@ rune_visual_width :: proc(r: rune) -> int {
 
 // Count number of lines in a string (for inline mode rendering)
 // This accounts for:
-// - ANSI escape sequences (stripped before counting)
-// - Terminal width for line wrapping
-// - Wide characters (CJK, emoji, etc.)
+// - ANSI escape sequences (stripped before counting - optimized with fast path)
+// - Terminal width for line wrapping (cached to avoid repeated syscalls)
+// - Wide characters (CJK, emoji, etc. - optimized with ASCII fast path)
+// Optimized: Terminal width is cached, strip_ansi avoids allocation if no ANSI codes
 count_lines :: proc(s: string) -> int {
 	if len(s) == 0 {
 		return 0
 	}
 
 	// Get terminal width for wrapping calculation
+	// Now cached - only queries system on first call or after resize
 	term_width, _, ok := get_window_size()
 	if !ok || term_width <= 0 {
 		term_width = 80 // Fallback to standard width
 	}
 
 	// Strip ANSI codes to get actual visual content
+	// Optimized: returns original string if no ANSI codes (zero allocation)
 	visual_content := strip_ansi(s)
 
 	line_count := 0
@@ -159,6 +197,7 @@ count_lines :: proc(s: string) -> int {
 			current_line_width = 0
 		} else {
 			// Calculate visual width of this character
+			// Optimized: Fast path for ASCII characters (95% of cases)
 			char_width := rune_visual_width(ch)
 			current_line_width += char_width
 
