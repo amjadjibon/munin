@@ -2,6 +2,7 @@ package munin
 
 import "core:fmt"
 import "core:strings"
+import "core:unicode/utf8"
 
 // ============================================================
 // TYPES
@@ -22,6 +23,8 @@ clear_screen :: proc(buf: ^strings.Builder) {
 }
 
 move_cursor :: proc(buf: ^strings.Builder, pos: Vec2i) {
+	assert(buf != nil, "Buffer cannot be nil")
+	assert(pos.x >= 0 && pos.y >= 0, "Position coordinates must be non-negative")
 	fmt.sbprintf(buf, "\x1b[%d;%dH", pos.y, pos.x)
 }
 
@@ -67,6 +70,10 @@ reset_style :: proc(buf: ^strings.Builder) {
 
 // Draw a box (optimized to reduce cursor movements)
 draw_box :: proc(buf: ^strings.Builder, pos: Vec2i, width, height: int, color: Color = .Reset) {
+	assert(buf != nil, "Buffer cannot be nil")
+	assert(pos.x >= 0 && pos.y >= 0, "Position coordinates must be non-negative")
+	assert(width >= 2 && height >= 2, "Box dimensions must be at least 2x2")
+
 	if color != .Reset {
 		set_color(buf, color)
 	}
@@ -104,6 +111,9 @@ draw_box :: proc(buf: ^strings.Builder, pos: Vec2i, width, height: int, color: C
 
 // Print text at position with optional color
 print_at :: proc(buf: ^strings.Builder, pos: Vec2i, text: string, color: Color = .Reset) {
+	assert(buf != nil, "Buffer cannot be nil")
+	assert(pos.x >= 0 && pos.y >= 0, "Position coordinates must be non-negative")
+
 	move_cursor(buf, pos)
 	if color != .Reset {
 		set_color(buf, color)
@@ -116,6 +126,9 @@ print_at :: proc(buf: ^strings.Builder, pos: Vec2i, text: string, color: Color =
 
 // Print formatted text at position with optional color
 printf_at :: proc(buf: ^strings.Builder, pos: Vec2i, color: Color, format: string, args: ..any) {
+	assert(buf != nil, "Buffer cannot be nil")
+	assert(pos.x >= 0 && pos.y >= 0, "Position coordinates must be non-negative")
+
 	move_cursor(buf, pos)
 	if color != .Reset {
 		set_color(buf, color)
@@ -135,9 +148,19 @@ draw_title :: proc(
 	color: Color = .Reset,
 	bold := false,
 ) {
-	// Calculate centered position
-	title_len := len(title)
+	assert(buf != nil, "Buffer cannot be nil")
+	assert(pos.x >= 0 && pos.y >= 0, "Position coordinates must be non-negative")
+	assert(width > 0, "Width must be positive")
+
+	// Calculate centered position using rune count for proper UTF-8 support
+	title_len := utf8.rune_count_in_string(title)
 	padding := (width - title_len) / 2
+
+	// Ensure padding is non-negative
+	if padding < 0 {
+		padding = 0
+	}
+
 	centered_x := pos.x + padding
 
 	// Draw title
