@@ -24,8 +24,8 @@ Key :: enum {
 }
 
 Key_Event :: struct {
-	key:  Key,
-	char: rune,
+	key:   Key,
+	char:  rune,
 	shift: bool,
 }
 
@@ -84,8 +84,8 @@ read_key :: proc() -> Maybe(Key_Event) {
 			shift_key_state := event.Event.KeyEvent.dwControlKeyState & win32.SHIFT_PRESSED != 0
 
 			result := Key_Event {
-				key  = .Char,
-				char = rune(ch),
+				key   = .Char,
+				char  = rune(ch),
 				shift = shift_key_state,
 			}
 
@@ -114,8 +114,8 @@ read_key :: proc() -> Maybe(Key_Event) {
 
 			return result
 		}
-} else {
-		buf: [6]byte  // Increased to handle Page Up/Down (ESC [ 5 ~ / ESC [ 6 ~)
+	} else {
+		buf: [16]byte // Increased to handle longer escape sequences (function keys, etc.)
 		n, err := os.read(os.stdin, buf[:])
 
 		if err != nil || n == 0 {
@@ -123,12 +123,12 @@ read_key :: proc() -> Maybe(Key_Event) {
 		}
 
 		result := Key_Event {
-			key  = .Char,
-			char = rune(buf[0]),
+			key   = .Char,
+			char  = rune(buf[0]),
 			shift = false,
 		}
 
-		
+
 		// Handle escape sequences
 		if buf[0] == 27 && n > 1 { 	// ESC
 			if buf[1] == '[' {
@@ -192,7 +192,7 @@ parse_sgr_mouse :: proc(buf: []byte, n: int) -> Maybe(Mouse_Event) {
 
 	// Find semicolons and M/m terminator
 	semi1, semi2, end := -1, -1, -1
-	for i in 3..<n {
+	for i in 3 ..< n {
 		if buf[i] == ';' {
 			if semi1 == -1 {
 				semi1 = i
@@ -211,19 +211,19 @@ parse_sgr_mouse :: proc(buf: []byte, n: int) -> Maybe(Mouse_Event) {
 
 	// Parse Cb (button + modifiers)
 	cb := 0
-	for i in 3..<semi1 {
+	for i in 3 ..< semi1 {
 		cb = cb * 10 + int(buf[i] - '0')
 	}
 
 	// Parse Cx (x coordinate, 1-based)
 	cx := 0
-	for i in (semi1+1)..<semi2 {
+	for i in (semi1 + 1) ..< semi2 {
 		cx = cx * 10 + int(buf[i] - '0')
 	}
 
 	// Parse Cy (y coordinate, 1-based)
 	cy := 0
-	for i in (semi2+1)..<end {
+	for i in (semi2 + 1) ..< end {
 		cy = cy * 10 + int(buf[i] - '0')
 	}
 
@@ -234,13 +234,13 @@ parse_sgr_mouse :: proc(buf: []byte, n: int) -> Maybe(Mouse_Event) {
 	shift := (cb & 0x04) != 0
 	alt := (cb & 0x08) != 0
 	ctrl := (cb & 0x10) != 0
-	motion := (cb & 0x20) != 0  // Bit 5 indicates motion/drag
+	motion := (cb & 0x20) != 0 // Bit 5 indicates motion/drag
 
 	button: Mouse_Button
 
 	// Check for wheel events first (codes 64-65 base, with modifiers in high bits)
 	// Wheel events have bit pattern: 64 (0x40) for up, 65 (0x41) for down
-	base_code := cb & 0x43  // Mask to get base wheel code
+	base_code := cb & 0x43 // Mask to get base wheel code
 	if base_code == 64 || base_code == 65 {
 		button = .WheelUp if base_code == 64 else .WheelDown
 		event_type = .Press
@@ -271,14 +271,14 @@ parse_sgr_mouse :: proc(buf: []byte, n: int) -> Maybe(Mouse_Event) {
 		}
 	}
 
-	return Mouse_Event{
+	return Mouse_Event {
 		button = button,
-		type = event_type,
-		x = cx - 1, // Convert to 0-based
-		y = cy - 1,
-		shift = shift,
-		ctrl = ctrl,
-		alt = alt,
+		type   = event_type,
+		x      = cx - 1, // Convert to 0-based
+		y      = cy - 1,
+		shift  = shift,
+		ctrl   = ctrl,
+		alt    = alt,
 	}
 }
 
@@ -304,8 +304,8 @@ read_input :: proc() -> Maybe(Input_Event) {
 			shift_key_state := event.Event.KeyEvent.dwControlKeyState & win32.SHIFT_PRESSED != 0
 
 			result := Key_Event {
-				key  = .Char,
-				char = rune(ch),
+				key   = .Char,
+				char  = rune(ch),
 				shift = shift_key_state,
 			}
 
@@ -367,7 +367,7 @@ read_input :: proc() -> Maybe(Input_Event) {
 				mouse_event_type = .Press if button != .None else .Release
 			}
 
-			return Mouse_Event{
+			return Mouse_Event {
 				button = button,
 				type = mouse_event_type,
 				x = int(pos.X),
@@ -379,7 +379,7 @@ read_input :: proc() -> Maybe(Input_Event) {
 		}
 	} else {
 		// Unix/Linux/macOS
-		buf: [32]byte  // Increased for mouse sequences
+		buf: [32]byte // Increased for mouse sequences
 		n, err := os.read(os.stdin, buf[:])
 
 		if err != nil || n == 0 {
@@ -395,8 +395,8 @@ read_input :: proc() -> Maybe(Input_Event) {
 
 		// Otherwise, parse as keyboard event
 		result := Key_Event {
-			key  = .Char,
-			char = rune(buf[0]),
+			key   = .Char,
+			char  = rune(buf[0]),
 			shift = false,
 		}
 
