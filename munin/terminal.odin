@@ -1,6 +1,7 @@
 package munin
 
 import "core:c"
+import "core:sync"
 import "core:sys/posix"
 import win32 "core:sys/windows"
 
@@ -25,15 +26,17 @@ when ODIN_OS != .Windows {
 	}
 }
 
-// Global flag for window resize detection
+// Global flag for window resize detection (using atomic for thread safety)
+// 0 = false, 1 = true
 @(private)
-window_resized: bool = false
+window_resized_atomic: sync.Atomic_Int = {}
 
 // Signal handler for SIGWINCH (window resize)
 when ODIN_OS != .Windows {
 	@(private)
 	sigwinch_handler :: proc "c" (sig: c.int) {
-		window_resized = true
+		// Atomically set the flag to 1 (true)
+		sync.atomic_store(&window_resized_atomic, 1)
 	}
 }
 
@@ -154,10 +157,10 @@ get_window_size :: proc() -> (width, height: int, ok: bool) {
 // Check if window was resized and clear the flag
 check_window_resized :: proc() -> bool {
 	when ODIN_OS != .Windows {
-		if window_resized {
-			window_resized = false
-			return true
-		}
+		// Atomically exchange the flag with 0 (false) and return previous value
+		// This is thread-safe: if signal handler sets it to 1, we'll detect it exactly once
+		previous := sync.atomic_exchange(&window_resized_atomic, 0)
+		return previous != 0
 	}
 	return false
 }

@@ -115,7 +115,7 @@ read_key :: proc() -> Maybe(Key_Event) {
 			return result
 		}
 } else {
-		buf: [6]byte  // Increased to handle Page Up/Down (ESC [ 5 ~ / ESC [ 6 ~)
+		buf: [16]byte  // Increased to handle longer escape sequences (function keys, etc.)
 		n, err := os.read(os.stdin, buf[:])
 
 		if err != nil || n == 0 {
