@@ -4,6 +4,7 @@ import "core:fmt"
 import "core:mem"
 import "core:strings"
 import "core:time"
+import "core:unicode/utf8"
 
 // Foreign imports for system calls
 when ODIN_OS != .Windows {
@@ -21,7 +22,7 @@ when ODIN_OS != .Windows {
 // Screen mode for the terminal
 Screen_Mode :: enum {
 	Fullscreen, // Alternative screen buffer (default)
-	Inline,     // Normal inline mode
+	Inline, // Normal inline mode
 }
 
 // Program represents a TUI application
@@ -43,25 +44,178 @@ Program :: struct($Model, $Msg: typeid) {
 // HELPER FUNCTIONS
 // ============================================================
 
+// Strip ANSI escape sequences from a string to get visual content
+// Optimized version: avoids allocation if no ANSI codes present
+strip_ansi :: proc(s: string) -> string {
+	if len(s) == 0 {
+		return s
+	}
+
+	// Fast path: check if there are any ANSI codes at all
+	has_ansi := false
+	for i in 0 ..< len(s) {
+		if s[i] == 0x1b {
+			has_ansi = true
+			break
+		}
+	}
+
+	// If no ANSI codes, return original string (zero allocation)
+	if !has_ansi {
+		return s
+	}
+
+	// Slow path: allocate and strip ANSI codes
+	result := make([]byte, len(s), context.temp_allocator)
+	result_len := 0
+	i := 0
+
+	for i < len(s) {
+		// Check for ANSI escape sequence (ESC [ ... m or other control sequences)
+		if s[i] == 0x1b {
+			// Bounds check once
+			if i + 1 >= len(s) {
+				// Incomplete escape at end, skip it
+				break
+			}
+
+			// Skip escape character
+			i += 1
+
+			// Handle CSI sequences (ESC [ ...)
+			if s[i] == '[' {
+				i += 1
+				// Skip until we find a letter (typically m, H, J, K, etc.)
+				for i < len(s) {
+					ch := s[i]
+					i += 1
+					// Optimized: single comparison using ranges
+					if (ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') {
+						break
+					}
+				}
+			} else if s[i] == ']' {
+				// Handle OSC sequences (ESC ] ... BEL or ESC ] ... ST)
+				i += 1
+				for i < len(s) {
+					if s[i] == 0x07 { 	// BEL
+						i += 1
+						break
+					}
+					// Check for ST (ESC \) with single bounds check
+					if i + 1 < len(s) && s[i] == 0x1b && s[i + 1] == '\\' {
+						i += 2
+						break
+					}
+					i += 1
+				}
+			}
+		} else {
+			// Regular character - no extra checks needed
+			result[result_len] = s[i]
+			result_len += 1
+			i += 1
+		}
+	}
+
+	return string(result[:result_len])
+}
+
+// Count visual width of a rune (accounts for wide characters like CJK)
+// Note: This is a simplified version. Full support would need unicode width tables.
+// Optimized with ASCII fast path (most common case)
+rune_visual_width :: proc(r: rune) -> int {
+	// Fast path: ASCII printable characters (most common case)
+	// This covers 95% of typical terminal text
+	if r >= 0x20 && r <= 0x7E {
+		return 1
+	}
+
+	// Fast path: Control characters and DEL
+	if r < 0x20 || (r >= 0x7F && r < 0xA0) {
+		return 0
+	}
+
+	// Slow path: Wide characters (CJK, emoji, etc.)
+	// Early exit with single range check before detailed checks
+	if r < 0x1100 {
+		return 1 // Latin-1 Supplement and other narrow chars
+	}
+
+	// Wide characters - check ranges
+	if (r >= 0x1100 && r <= 0x115F) ||
+	   (r >= 0x2E80 && r <= 0x2EFF) ||
+	   (r >= 0x2F00 && r <= 0x2FDF) ||
+	   (r >= 0x3000 && r <= 0x303F) ||// Hangul Jamo
+	   (r >= 0x3040 && r <= 0x309F) ||// CJK Radicals
+	   (r >= 0x30A0 && r <= 0x30FF) ||// Kangxi Radicals
+	   (r >= 0x3400 && r <= 0x4DBF) ||// CJK Symbols and Punctuation
+	   (r >= 0x4E00 && r <= 0x9FFF) ||// Hiragana
+	   (r >= 0xAC00 && r <= 0xD7AF) ||// Katakana
+	   (r >= 0xF900 && r <= 0xFAFF) ||// CJK Extension A
+	   (r >= 0xFE30 && r <= 0xFE4F) ||// CJK Unified Ideographs
+	   (r >= 0xFF00 && r <= 0xFF60) ||// Hangul Syllables
+	   (r >= 0xFFE0 && r <= 0xFFE6) ||// CJK Compatibility
+	   (r >= 0x20000 && r <= 0x2FFFF) // CJK Compatibility Forms// Fullwidth Forms// Fullwidth Forms// CJK Extension B, C, D, E
+	{
+		return 2
+	}
+
+	// Default: 1 cell
+	return 1
+}
+
 // Count number of lines in a string (for inline mode rendering)
+// This accounts for:
+// - ANSI escape sequences (stripped before counting - optimized with fast path)
+// - Terminal width for line wrapping (cached to avoid repeated syscalls)
+// - Wide characters (CJK, emoji, etc. - optimized with ASCII fast path)
+// Optimized: Terminal width is cached, strip_ansi avoids allocation if no ANSI codes
 count_lines :: proc(s: string) -> int {
 	if len(s) == 0 {
 		return 0
 	}
 
-	count := 0
-	for ch in s {
+	// Get terminal width for wrapping calculation
+	// Now cached - only queries system on first call or after resize
+	term_width, _, ok := get_window_size()
+	if !ok || term_width <= 0 {
+		term_width = 80 // Fallback to standard width
+	}
+
+	// Strip ANSI codes to get actual visual content
+	// Optimized: returns original string if no ANSI codes (zero allocation)
+	visual_content := strip_ansi(s)
+
+	line_count := 0
+	current_line_width := 0
+
+	for ch in visual_content {
 		if ch == '\n' {
-			count += 1
+			// Explicit newline
+			line_count += 1
+			current_line_width = 0
+		} else {
+			// Calculate visual width of this character
+			// Optimized: Fast path for ASCII characters (95% of cases)
+			char_width := rune_visual_width(ch)
+			current_line_width += char_width
+
+			// Check if we've exceeded terminal width (wrapping)
+			if current_line_width > term_width {
+				line_count += 1
+				current_line_width = char_width // Start new line with this character
+			}
 		}
 	}
 
-	// If string doesn't end with newline, add 1 for the last line
-	if len(s) > 0 && s[len(s) - 1] != '\n' {
-		count += 1
+	// If there's content on the last line (not ending with newline), count it
+	if current_line_width > 0 ||
+	   (len(visual_content) > 0 && visual_content[len(visual_content) - 1] != '\n') {
+		line_count += 1
 	}
 
-	return count
+	return line_count
 }
 
 // ============================================================
@@ -101,7 +255,7 @@ make_program_with_subs :: proc(
 	init: proc() -> $Model,
 	update: proc(msg: $Msg, model: Model) -> (Model, bool),
 	view: proc(model: Model, buf: ^strings.Builder),
-	subscriptions: proc(Model) -> Maybe(Msg),
+	subscriptions: proc(_: Model) -> Maybe(Msg),
 	allocator := context.allocator,
 ) -> Program(Model, Msg) {
 	buffer :=
