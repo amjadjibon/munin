@@ -36,7 +36,7 @@ draw_spinner :: proc(
     pos: munin.Vec2i,
     frame: int,
     style: Spinner_Style = .Dots,
-    color: munin.Color = .BrightCyan,
+    color: munin.Color = munin.Basic_Color.BrightCyan,
     label: string = "",
     direction: Spinner_Direction = .Forward,
 )

@@ -40,8 +40,8 @@ draw_table :: proc(
     pos: munin.Vec2i,
     columns: []Table_Column,
     rows: [][]string,
-    header_color: munin.Color = .BrightCyan,
-    border_color: munin.Color = .White,
+    header_color: munin.Color = munin.Basic_Color.BrightCyan,
+    border_color: munin.Color = munin.Basic_Color.White,
 )
 ```
 
@@ -50,8 +50,8 @@ draw_table :: proc(
 - `pos` - Top-left position of the table
 - `columns` - Array of column definitions
 - `rows` - 2D array of row data (each row is an array of strings)
-- `header_color` - Color for header text (default: `.BrightCyan`)
-- `border_color` - Color for borders and separators (default: `.White`)
+- `header_color` - Color for header text (default: `munin.Basic_Color.BrightCyan`)
+- `border_color` - Color for borders and separators (default: `munin.Basic_Color.White`)
 
 **Features:**
 - Automatic border drawing with Unicode characters

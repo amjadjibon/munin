@@ -30,7 +30,7 @@ draw_box_styled :: proc(
     pos: munin.Vec2i,
     width, height: int,
     style: Box_Style = .Single,
-    color: munin.Color = .Reset,
+    color: munin.Color = munin.Basic_Color.Reset,
 )
 ```
 
@@ -60,8 +60,8 @@ draw_box_titled :: proc(
     width, height: int,
     title: string,
     style: Box_Style = .Single,
-    color: munin.Color = .Reset,
-    title_color: munin.Color = .BrightWhite,
+    color: munin.Color = munin.Basic_Color.Reset,
+    title_color: munin.Color = munin.Basic_Color.BrightWhite,
 )
 ```
 
@@ -98,7 +98,7 @@ draw_box_filled :: proc(
     width, height: int,
     bg_color: munin.Color,
     border_style: Box_Style = .Single,
-    border_color: munin.Color = .Reset,
+    border_color: munin.Color = munin.Basic_Color.Reset,
 )
 ```
 

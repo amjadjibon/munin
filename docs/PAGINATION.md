@@ -29,9 +29,9 @@ draw_pagination :: proc(
     total_pages: int,
     style: Pagination_Style = .Numbers,
     max_visible: int = 7,
-    active_color: munin.Color = .BrightCyan,
-    normal_color: munin.Color = .White,
-    disabled_color: munin.Color = .BrightBlue,
+    active_color: munin.Color = munin.Basic_Color.BrightCyan,
+    normal_color: munin.Color = munin.Basic_Color.White,
+    disabled_color: munin.Color = munin.Basic_Color.BrightBlue,
 )
 ```
 
@@ -42,9 +42,9 @@ draw_pagination :: proc(
 - `total_pages` - Total number of pages
 - `style` - Visual style (default: `.Numbers`)
 - `max_visible` - Maximum visible page numbers in `.Numbers` style (default: 7)
-- `active_color` - Color for current page (default: `.BrightCyan`)
-- `normal_color` - Color for other pages (default: `.White`)
-- `disabled_color` - Color for disabled navigation (default: `.BrightBlue`)
+- `active_color` - Color for current page (default: `munin.Basic_Color.BrightCyan`)
+- `normal_color` - Color for other pages (default: `munin.Basic_Color.White`)
+- `disabled_color` - Color for disabled navigation (default: `munin.Basic_Color.BrightBlue`)
 
 **Features:**
 - Automatically disables prev/next arrows at boundaries

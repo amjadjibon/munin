@@ -30,8 +30,8 @@ draw_timer :: proc(
     remaining: time.Duration,
     state: Timer_State,
     show_milliseconds: bool = false,
-    label_color: munin.Color = .BrightYellow,
-    time_color: munin.Color = .BrightGreen,
+    label_color: munin.Color = munin.Basic_Color.BrightYellow,
+    time_color: munin.Color = munin.Basic_Color.BrightGreen,
 )
 ```
 
@@ -41,8 +41,8 @@ draw_timer :: proc(
 - `remaining` - Time remaining (can be negative for overtime)
 - `state` - Current timer state
 - `show_milliseconds` - Include milliseconds in display (default: `false`)
-- `label_color` - Color for labels (default: `.BrightYellow`)
-- `time_color` - Color for time display (default: `.BrightGreen`)
+- `label_color` - Color for labels (default: `munin.Basic_Color.BrightYellow`)
+- `time_color` - Color for time display (default: `munin.Basic_Color.BrightGreen`)
 
 **Features:**
 - Formats time as `HH:MM:SS` or `HH:MM:SS.mmm`

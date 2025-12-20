@@ -139,6 +139,8 @@ munin.run(&program, input_handler, target_fps = 60)
 
 ## API Reference
 
+> **New!** Check out the [Styling & Layout Guide](docs/STYLE.md) for the new Lipgloss-inspired API.
+
 ### Core Functions
 
 #### `make_program`
