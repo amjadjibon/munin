@@ -150,18 +150,18 @@ rune_visual_width :: proc(r: rune) -> int {
 	   (r >= 0x3040 && r <= 0x309F) ||
 	   (r >= 0x30A0 && r <= 0x30FF) ||
 	   (r >= 0x3400 && r <= 0x4DBF) ||
-	   (r >= 0x4E00 && r <= 0x9FFF) ||// Hangul Jamo
-	   (r >= 0xAC00 && r <= 0xD7AF) ||// CJK Radicals
-	   (r >= 0xF900 && r <= 0xFAFF) ||// Kangxi Radicals
-	   (r >= 0xFE30 && r <= 0xFE4F) ||// CJK Symbols and Punctuation
-	   (r >= 0xFF00 && r <= 0xFF60) ||// Hiragana
-	   (r >= 0xFFE0 && r <= 0xFFE6) ||// Katakana
-	   (r >= 0x1F300 && r <= 0x1F5FF) ||// CJK Extension A
-	   (r >= 0x1F600 && r <= 0x1F64F) ||// CJK Unified Ideographs
-	   (r >= 0x1F680 && r <= 0x1F6FF) ||// CJK Compatibility
-	   (r >= 0x1F900 && r <= 0x1F9FF) ||// Misc Symbols and Pictographs
-	   (r >= 0x1FA70 && r <= 0x1FAFF) ||// Emoticons
-	   (r >= 0x20000 && r <= 0x2FFFF) // Transport and Map Symbols// Supplemental Symbols and Pictographs// Symbols and Pictographs Extended-A// CJK Extension B, C, D, E
+	   (r >= 0x4E00 && r <= 0x9FFF) ||
+	   (r >= 0xAC00 && r <= 0xD7AF) ||
+	   (r >= 0xF900 && r <= 0xFAFF) ||
+	   (r >= 0xFE30 && r <= 0xFE4F) ||
+	   (r >= 0xFF00 && r <= 0xFF60) ||
+	   (r >= 0xFFE0 && r <= 0xFFE6) ||
+	   (r >= 0x1F300 && r <= 0x1F5FF) ||// Hangul Jamo
+	   (r >= 0x1F600 && r <= 0x1F64F) ||// CJK Radicals
+	   (r >= 0x1F680 && r <= 0x1F6FF) ||// Kangxi Radicals
+	   (r >= 0x1F900 && r <= 0x1F9FF) ||// CJK Symbols and Punctuation
+	   (r >= 0x1FA70 && r <= 0x1FAFF) ||// Hiragana
+	   (r >= 0x20000 && r <= 0x2FFFF) // Katakana// CJK Extension A// CJK Unified Ideographs// CJK Compatibility// Misc Symbols and Pictographs// Emoticons// Transport and Map Symbols// Supplemental Symbols and Pictographs// Symbols and Pictographs Extended-A// CJK Extension B, C, D, E
 	{
 		return 2
 	}
@@ -321,7 +321,7 @@ run :: proc(
 	input_handler: proc() -> Maybe(Msg),
 	target_fps: i64 = 60,
 	initial_mode: Screen_Mode = .Fullscreen,
-	clear_on_exit: bool = false,
+	clear_on_exit: bool = true,
 ) {
 	// Set initial screen mode and clear on exit option
 	program.screen_mode = initial_mode
