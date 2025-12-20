@@ -73,11 +73,11 @@ draw_box_styled :: proc(
 	pos: munin.Vec2i,
 	width, height: int,
 	style: Box_Style = .Single,
-	color: munin.Color = .Reset,
+	color: munin.Color = munin.Basic_Color.Reset,
 ) {
 	border := BOX_STYLES[style]
 
-	if color != .Reset {
+	if !munin.is_color_reset(color) {
 		munin.set_color(buf, color)
 	}
 
@@ -107,7 +107,7 @@ draw_box_styled :: proc(
 	}
 	strings.write_string(buf, border.bottom_right)
 
-	if color != .Reset {
+	if !munin.is_color_reset(color) {
 		munin.reset_style(buf)
 	}
 }
@@ -119,8 +119,8 @@ draw_box_titled :: proc(
 	width, height: int,
 	title: string,
 	style: Box_Style = .Single,
-	color: munin.Color = .Reset,
-	title_color: munin.Color = .BrightWhite,
+	color: munin.Color = munin.Basic_Color.Reset,
+	title_color: munin.Color = munin.Basic_Color.BrightWhite,
 ) {
 	draw_box_styled(buf, pos, width, height, style, color)
 
@@ -133,17 +133,17 @@ draw_box_titled :: proc(
 		}
 
 		munin.move_cursor(buf, {title_x, pos.y})
-		if color != .Reset {
+		if !munin.is_color_reset(color) {
 			munin.set_color(buf, color)
 		}
 		strings.write_string(buf, " ")
 		munin.set_bold(buf)
-		if title_color != .Reset {
+		if !munin.is_color_reset(title_color) {
 			munin.set_color(buf, title_color)
 		}
 		strings.write_string(buf, title_display)
 		munin.reset_style(buf)
-		if color != .Reset {
+		if !munin.is_color_reset(color) {
 			munin.set_color(buf, color)
 		}
 		strings.write_string(buf, " ")
@@ -158,7 +158,7 @@ draw_box_filled :: proc(
 	width, height: int,
 	bg_color: munin.Color,
 	border_style: Box_Style = .Single,
-	border_color: munin.Color = .Reset,
+	border_color: munin.Color = munin.Basic_Color.Reset,
 ) {
 	// Fill background
 	munin.set_bg_color(buf, bg_color)

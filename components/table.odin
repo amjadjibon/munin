@@ -26,8 +26,8 @@ draw_table :: proc(
 	pos: munin.Vec2i,
 	columns: []Table_Column,
 	rows: [][]string,
-	header_color: munin.Color = .BrightCyan,
-	border_color: munin.Color = .White,
+	header_color: munin.Color = munin.Basic_Color.BrightCyan,
+	border_color: munin.Color = munin.Basic_Color.White,
 ) {
 	if len(columns) == 0 {
 		return

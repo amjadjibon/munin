@@ -15,12 +15,12 @@ Input_Style :: enum {
 }
 
 Input_State :: struct {
-	buffer:      [dynamic]u8,
-	cursor_pos:  int,
-	is_focused:  bool,
-	is_password: bool,
-	max_length:  int,
-	placeholder: string,
+	buffer:             [dynamic]u8,
+	cursor_pos:         int,
+	is_focused:         bool,
+	is_password:        bool,
+	max_length:         int,
+	placeholder:        string,
 	cursor_blink_state: bool,
 }
 
@@ -189,10 +189,10 @@ draw_input :: proc(
 	width: int,
 	style: Input_Style = .Box,
 	label: string = "",
-	label_color: munin.Color = .BrightYellow,
-	text_color: munin.Color = .White,
-	cursor_color: munin.Color = .BrightGreen,
-	placeholder_color: munin.Color = .BrightBlue,
+	label_color: munin.Color = munin.Basic_Color.BrightYellow,
+	text_color: munin.Color = munin.Basic_Color.White,
+	cursor_color: munin.Color = munin.Basic_Color.BrightGreen,
+	placeholder_color: munin.Color = munin.Basic_Color.BrightBlue,
 ) {
 	current_x := pos.x
 	current_y := pos.y
@@ -208,7 +208,10 @@ draw_input :: proc(
 	case .Box:
 		// Top border
 		munin.move_cursor(buf, {current_x, current_y})
-		munin.set_color(buf, state.is_focused ? munin.Color.BrightCyan : munin.Color.White)
+		munin.set_color(
+			buf,
+			state.is_focused ? munin.Basic_Color.BrightCyan : munin.Basic_Color.White,
+		)
 		strings.write_string(buf, "┌")
 		for i in 0 ..< width - 2 {
 			strings.write_string(buf, "─")
@@ -219,7 +222,10 @@ draw_input :: proc(
 
 		// Input area
 		munin.move_cursor(buf, {current_x, current_y})
-		munin.set_color(buf, state.is_focused ? munin.Color.BrightCyan : munin.Color.White)
+		munin.set_color(
+			buf,
+			state.is_focused ? munin.Basic_Color.BrightCyan : munin.Basic_Color.White,
+		)
 		strings.write_string(buf, "│")
 		munin.reset_style(buf)
 
@@ -235,14 +241,20 @@ draw_input :: proc(
 		)
 
 		munin.move_cursor(buf, {current_x + width - 1, current_y})
-		munin.set_color(buf, state.is_focused ? munin.Color.BrightCyan : munin.Color.White)
+		munin.set_color(
+			buf,
+			state.is_focused ? munin.Basic_Color.BrightCyan : munin.Basic_Color.White,
+		)
 		strings.write_string(buf, "│")
 		munin.reset_style(buf)
 		current_y += 1
 
 		// Bottom border
 		munin.move_cursor(buf, {current_x, current_y})
-		munin.set_color(buf, state.is_focused ? munin.Color.BrightCyan : munin.Color.White)
+		munin.set_color(
+			buf,
+			state.is_focused ? munin.Basic_Color.BrightCyan : munin.Basic_Color.White,
+		)
 		strings.write_string(buf, "└")
 		for i in 0 ..< width - 2 {
 			strings.write_string(buf, "─")
@@ -265,7 +277,10 @@ draw_input :: proc(
 
 		// Draw underline
 		munin.move_cursor(buf, {current_x, current_y})
-		munin.set_color(buf, state.is_focused ? munin.Color.BrightCyan : munin.Color.White)
+		munin.set_color(
+			buf,
+			state.is_focused ? munin.Basic_Color.BrightCyan : munin.Basic_Color.White,
+		)
 		for i in 0 ..< width {
 			strings.write_string(buf, "─")
 		}
@@ -394,10 +409,10 @@ draw_input_form :: proc(buf: ^strings.Builder, pos: munin.Vec2i, fields: []struc
 			width,
 			.Box,
 			field.label,
-			.BrightYellow,
-			.White,
-			.BrightGreen,
-			.BrightBlue,
+			munin.Basic_Color.BrightYellow,
+			munin.Basic_Color.White,
+			munin.Basic_Color.BrightGreen,
+			munin.Basic_Color.BrightBlue,
 		)
 		current_y += 4 // Box takes 3 lines + spacing
 	}

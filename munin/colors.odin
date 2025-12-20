@@ -185,3 +185,11 @@ ANSI_BG_CODES := [Basic_Color]string {
 	.BrightCyan    = "\x1b[106m",
 	.BrightWhite   = "\x1b[107m",
 }
+
+// Helper to check if a color is effectively 'Reset'
+is_color_reset :: proc(c: Color) -> bool {
+	if v, ok := c.(Basic_Color); ok {
+		return v == .Reset
+	}
+	return false
+}

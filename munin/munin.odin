@@ -148,20 +148,20 @@ rune_visual_width :: proc(r: rune) -> int {
 	   (r >= 0x2F00 && r <= 0x2FDF) ||
 	   (r >= 0x3000 && r <= 0x303F) ||
 	   (r >= 0x3040 && r <= 0x309F) ||
-	   (r >= 0x30A0 && r <= 0x30FF) ||// Hangul Jamo
-	   (r >= 0x3400 && r <= 0x4DBF) ||// CJK Radicals
-	   (r >= 0x4E00 && r <= 0x9FFF) ||// Kangxi Radicals
-	   (r >= 0xAC00 && r <= 0xD7AF) ||// CJK Symbols and Punctuation
-	   (r >= 0xF900 && r <= 0xFAFF) ||// Hiragana
-	   (r >= 0xFE30 && r <= 0xFE4F) ||// Katakana
-	   (r >= 0xFF00 && r <= 0xFF60) ||// CJK Extension A
-	   (r >= 0xFFE0 && r <= 0xFFE6) ||// CJK Unified Ideographs
-	   (r >= 0x1F300 && r <= 0x1F5FF) ||// CJK Compatibility
-	   (r >= 0x1F600 && r <= 0x1F64F) ||// Misc Symbols and Pictographs
-	   (r >= 0x1F680 && r <= 0x1F6FF) ||// Emoticons
-	   (r >= 0x1F900 && r <= 0x1F9FF) ||// Transport and Map Symbols
-	   (r >= 0x1FA70 && r <= 0x1FAFF) ||// Supplemental Symbols and Pictographs
-	   (r >= 0x20000 && r <= 0x2FFFF) // Symbols and Pictographs Extended-A// CJK Extension B, C, D, E
+	   (r >= 0x30A0 && r <= 0x30FF) ||
+	   (r >= 0x3400 && r <= 0x4DBF) ||
+	   (r >= 0x4E00 && r <= 0x9FFF) ||// Hangul Jamo
+	   (r >= 0xAC00 && r <= 0xD7AF) ||// CJK Radicals
+	   (r >= 0xF900 && r <= 0xFAFF) ||// Kangxi Radicals
+	   (r >= 0xFE30 && r <= 0xFE4F) ||// CJK Symbols and Punctuation
+	   (r >= 0xFF00 && r <= 0xFF60) ||// Hiragana
+	   (r >= 0xFFE0 && r <= 0xFFE6) ||// Katakana
+	   (r >= 0x1F300 && r <= 0x1F5FF) ||// CJK Extension A
+	   (r >= 0x1F600 && r <= 0x1F64F) ||// CJK Unified Ideographs
+	   (r >= 0x1F680 && r <= 0x1F6FF) ||// CJK Compatibility
+	   (r >= 0x1F900 && r <= 0x1F9FF) ||// Misc Symbols and Pictographs
+	   (r >= 0x1FA70 && r <= 0x1FAFF) ||// Emoticons
+	   (r >= 0x20000 && r <= 0x2FFFF) // Transport and Map Symbols// Supplemental Symbols and Pictographs// Symbols and Pictographs Extended-A// CJK Extension B, C, D, E
 	{
 		return 2
 	}

@@ -22,8 +22,8 @@ draw_progress_bar :: proc(
 	width: int,
 	progress: int, // 0-100
 	style: Progress_Style = .Blocks,
-	filled_color: munin.Color = .BrightGreen,
-	empty_color: munin.Color = .White,
+	filled_color: munin.Color = munin.Basic_Color.BrightGreen,
+	empty_color: munin.Color = munin.Basic_Color.White,
 	show_percent: bool = true,
 ) {
 	filled := (progress * width) / 100
@@ -97,8 +97,8 @@ draw_progress_bar_vertical :: proc(
 	buf: ^strings.Builder,
 	x, y, height: int,
 	progress: int, // 0-100
-	filled_color: munin.Color = .BrightGreen,
-	empty_color: munin.Color = .White,
+	filled_color: munin.Color = munin.Basic_Color.BrightGreen,
+	empty_color: munin.Color = munin.Basic_Color.White,
 ) {
 	filled := (progress * height) / 100
 	filled = clamp(filled, 0, height)
@@ -123,14 +123,14 @@ draw_progress_bar_boxed :: proc(
 	x, y, width: int,
 	progress: int,
 	label: string = "",
-	filled_color: munin.Color = .BrightGreen,
-	empty_color: munin.Color = .White,
+	filled_color: munin.Color = munin.Basic_Color.BrightGreen,
+	empty_color: munin.Color = munin.Basic_Color.White,
 ) {
 	current_y := y
 
 	// Draw label if provided
 	if len(label) > 0 {
-		munin.print_at(buf, {x, current_y}, label, .BrightYellow)
+		munin.print_at(buf, {x, current_y}, label, munin.Basic_Color.BrightYellow)
 		current_y += 1
 	}
 
