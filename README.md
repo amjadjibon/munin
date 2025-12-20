@@ -528,6 +528,8 @@ See the `example/` directory and `docs/` for component documentation.
 The `example/` directory contains numerous examples demonstrating various features:
 
 - **counter**: Basic counter app (canonical example)
+- **fstree**: Full file system tree viewer (like `tree` command)
+- **tree**: Tree component demo with sample data
 - **style**: Lipgloss-inspired styling system
 - **mouse**: Mouse input and click handling
 - **hover**: Hover effects and tracking
