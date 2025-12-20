@@ -129,6 +129,15 @@ test_rune_visual_width_fullwidth :: proc(t: ^testing.T) {
 	testing.expect_value(t, rune_visual_width('０'), 2)
 }
 
+@(test)
+test_rune_visual_width_emoji :: proc(t: ^testing.T) {
+	// Standard Emojis
+	testing.expect_value(t, rune_visual_width('😀'), 2) // Emoticon
+	testing.expect_value(t, rune_visual_width('🚀'), 2) // Transport
+	testing.expect_value(t, rune_visual_width('🌈'), 2) // Misc Symbol
+	testing.expect_value(t, rune_visual_width('🧅'), 2) // Supplemental
+}
+
 // ============================================================
 // COUNT LINES TESTS
 // ============================================================

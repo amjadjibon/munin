@@ -146,17 +146,22 @@ rune_visual_width :: proc(r: rune) -> int {
 	if (r >= 0x1100 && r <= 0x115F) ||
 	   (r >= 0x2E80 && r <= 0x2EFF) ||
 	   (r >= 0x2F00 && r <= 0x2FDF) ||
-	   (r >= 0x3000 && r <= 0x303F) ||// Hangul Jamo
-	   (r >= 0x3040 && r <= 0x309F) ||// CJK Radicals
-	   (r >= 0x30A0 && r <= 0x30FF) ||// Kangxi Radicals
-	   (r >= 0x3400 && r <= 0x4DBF) ||// CJK Symbols and Punctuation
-	   (r >= 0x4E00 && r <= 0x9FFF) ||// Hiragana
-	   (r >= 0xAC00 && r <= 0xD7AF) ||// Katakana
-	   (r >= 0xF900 && r <= 0xFAFF) ||// CJK Extension A
-	   (r >= 0xFE30 && r <= 0xFE4F) ||// CJK Unified Ideographs
-	   (r >= 0xFF00 && r <= 0xFF60) ||// Hangul Syllables
-	   (r >= 0xFFE0 && r <= 0xFFE6) ||// CJK Compatibility
-	   (r >= 0x20000 && r <= 0x2FFFF) // CJK Compatibility Forms// Fullwidth Forms// Fullwidth Forms// CJK Extension B, C, D, E
+	   (r >= 0x3000 && r <= 0x303F) ||
+	   (r >= 0x3040 && r <= 0x309F) ||
+	   (r >= 0x30A0 && r <= 0x30FF) ||// Hangul Jamo
+	   (r >= 0x3400 && r <= 0x4DBF) ||// CJK Radicals
+	   (r >= 0x4E00 && r <= 0x9FFF) ||// Kangxi Radicals
+	   (r >= 0xAC00 && r <= 0xD7AF) ||// CJK Symbols and Punctuation
+	   (r >= 0xF900 && r <= 0xFAFF) ||// Hiragana
+	   (r >= 0xFE30 && r <= 0xFE4F) ||// Katakana
+	   (r >= 0xFF00 && r <= 0xFF60) ||// CJK Extension A
+	   (r >= 0xFFE0 && r <= 0xFFE6) ||// CJK Unified Ideographs
+	   (r >= 0x1F300 && r <= 0x1F5FF) ||// CJK Compatibility
+	   (r >= 0x1F600 && r <= 0x1F64F) ||// Misc Symbols and Pictographs
+	   (r >= 0x1F680 && r <= 0x1F6FF) ||// Emoticons
+	   (r >= 0x1F900 && r <= 0x1F9FF) ||// Transport and Map Symbols
+	   (r >= 0x1FA70 && r <= 0x1FAFF) ||// Supplemental Symbols and Pictographs
+	   (r >= 0x20000 && r <= 0x2FFFF) // Symbols and Pictographs Extended-A// CJK Extension B, C, D, E
 	{
 		return 2
 	}
@@ -462,5 +467,8 @@ run :: proc(
 		if frame_duration < FRAME_TIME {
 			time.sleep(FRAME_TIME - frame_duration)
 		}
+
+		// Reset temp allocator at end of frame
+		free_all(context.temp_allocator)
 	}
 }
