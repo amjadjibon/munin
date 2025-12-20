@@ -1,7 +1,13 @@
 package munin
 
+
 import "core:os"
 import win32 "core:sys/windows"
+
+@(private)
+input_buffer: [1024]byte
+@(private)
+input_buffer_len: int
 
 
 // ============================================================
@@ -27,6 +33,8 @@ Key_Event :: struct {
 	key:   Key,
 	char:  rune,
 	shift: bool,
+	ctrl:  bool,
+	alt:   bool,
 }
 
 // Mouse button types
@@ -64,118 +72,134 @@ Input_Event :: union {
 	Mouse_Event,
 }
 
-read_key :: proc() -> Maybe(Key_Event) {
-	when ODIN_OS == .Windows {
-		stdin := win32.GetStdHandle(win32.STD_INPUT_HANDLE)
-		events_read: win32.DWORD
-		event: win32.INPUT_RECORD
 
-		if !win32.PeekConsoleInputW(stdin, &event, 1, &events_read) || events_read == 0 {
-			return nil
-		}
-
-		if !win32.ReadConsoleInputW(stdin, &event, 1, &events_read) {
-			return nil
-		}
-
-		if event.EventType == win32.KEY_EVENT && event.Event.KeyEvent.bKeyDown {
-			vk := event.Event.KeyEvent.wVirtualKeyCode
-			ch := event.Event.KeyEvent.uChar.UnicodeChar
-			shift_key_state := event.Event.KeyEvent.dwControlKeyState & win32.SHIFT_PRESSED != 0
-
-			result := Key_Event {
-				key   = .Char,
-				char  = rune(ch),
-				shift = shift_key_state,
-			}
-
-			switch vk {
-			case win32.VK_UP:
-				result.key = .Up
-			case win32.VK_DOWN:
-				result.key = .Down
-			case win32.VK_LEFT:
-				result.key = .Left
-			case win32.VK_RIGHT:
-				result.key = .Right
-			case win32.VK_RETURN:
-				result.key = .Enter
-			case win32.VK_ESCAPE:
-				result.key = .Escape
-			case win32.VK_BACK:
-				result.key = .Backspace
-			case win32.VK_TAB:
-				result.key = .Tab
-			case win32.VK_PRIOR:
-				result.key = .PageUp
-			case win32.VK_NEXT:
-				result.key = .PageDown
-			}
-
-			return result
-		}
-	} else {
-		buf: [16]byte // Increased to handle longer escape sequences (function keys, etc.)
-		n, err := os.read(os.stdin, buf[:])
-
-		if err != nil || n == 0 {
-			return nil
-		}
-
-		result := Key_Event {
-			key   = .Char,
-			char  = rune(buf[0]),
-			shift = false,
-		}
-
-
-		// Handle escape sequences
-		if buf[0] == 27 && n > 1 { 	// ESC
-			if buf[1] == '[' {
-				if n == 3 {
-					switch buf[2] {
-					case 'A':
-						result.key = .Up
-					case 'B':
-						result.key = .Down
-					case 'C':
-						result.key = .Right
-					case 'D':
-						result.key = .Left
-					}
-					return result
-				} else if n == 4 && buf[2] == 'Z' {
-					// Shift+Tab combination: ESC [ Z
-					result.key = .Tab
-					result.shift = true
-					return result
-				} else if n == 5 && buf[2] == '5' && buf[3] == '~' {
-					// Page Up: ESC [ 5 ~
-					result.key = .PageUp
-					return result
-				} else if n == 5 && buf[2] == '6' && buf[3] == '~' {
-					// Page Down: ESC [ 6 ~
-					result.key = .PageDown
-					return result
-				}
-			}
-			result.key = .Escape
-			return result
-		}
-
-		switch buf[0] {
-		case 13, 10:
-			// CR and LF (Enter key can be either)
-			result.key = .Enter
-		case 127:
-			result.key = .Backspace
-		case 9:
-			result.key = .Tab
-		}
-
-		return result
+// Helper: Parse a single event from a buffer
+// Returns: event, consumed_bytes, success
+parse_event_from_buffer :: proc(buf: []byte) -> (Input_Event, int, bool) {
+	if len(buf) == 0 {
+		return nil, 0, false
 	}
 
+	// Handle Escape Sequences
+	if buf[0] == 0x1b {
+		// Just ESC?
+		if len(buf) == 1 {
+			// We can't know if it's just ESC or start of sequence without waiting.
+			// But for responsiveness, if we only have ESC, we might want to wait a bit
+			// or assume ESC if enough time passed.
+			// For now, in a non-blocking poll, this is tricky.
+			// Standard approach: if we read ESC and nothing else follows *immediately*, it's ESC.
+			// But since we are buffering, 'immediately' is relative.
+			// Let's assume for now if it's just ESC in buffer, we wait for more (return false)
+			// UNLESS we are sure no more data is coming (which we can't be).
+			// TODO: Implement proper timeout for ESC key.
+			// validation: if the user pressed ESC, we need to return it eventually.
+			// For now, let's treat single ESC as partial sequence unless followed by invalid char.
+			return nil, 0, false
+		}
+
+		if buf[1] == '[' {
+			if len(buf) < 3 {
+				return nil, 0, false
+			}
+
+			// Mouse SGR: ESC [ < ...
+			if buf[2] == '<' {
+				// We need to find the 'm' or 'M' terminator
+				end_idx := -1
+				for i in 3 ..< len(buf) {
+					if buf[i] == 'm' || buf[i] == 'M' {
+						end_idx = i
+						break
+					}
+				}
+				if end_idx == -1 {
+					// Incomplete mouse sequence
+					return nil, 0, false
+				}
+
+				// Apply limit check for sanity (e.g. max mouse seq length ~32)
+				if end_idx > 32 {
+					// Garbage or too long, consume 1 byte (ESC) and retry
+					return nil, 1, false // Actually we should fail this invalid sequence
+				}
+
+				// Parse using existing helper (adapted)
+				if mouse, ok := parse_sgr_mouse(buf[:end_idx + 1], end_idx + 1).?; ok {
+					return mouse, end_idx + 1, true
+				} else {
+					// Failed to parse, consume ESC
+					// Or consume whole sequence as garbage?
+					// Safer to consume ESC
+					return Key_Event{key = .Escape}, 1, true
+				}
+			}
+
+			// Regular CSI sequences
+
+			// Arrow keys: ESC [ A/B/C/D
+			switch buf[2] {
+			case 'A':
+				return Key_Event{key = .Up}, 3, true
+			case 'B':
+				return Key_Event{key = .Down}, 3, true
+			case 'C':
+				return Key_Event{key = .Right}, 3, true
+			case 'D':
+				return Key_Event{key = .Left}, 3, true
+			case 'Z':
+				return Key_Event{key = .Tab, shift = true}, 3, true // Shift+Tab
+			}
+
+			// Page Up/Down: ESC [ 5 ~ / ESC [ 6 ~
+			if len(buf) >= 4 {
+				if buf[2] == '5' && buf[3] == '~' {
+					return Key_Event{key = .PageUp}, 4, true
+				}
+				if buf[2] == '6' && buf[3] == '~' {
+					return Key_Event{key = .PageDown}, 4, true
+				}
+			} else {
+				// Might be incomplete 5~
+				if buf[2] == '5' || buf[2] == '6' {
+					return nil, 0, false
+				}
+			}
+
+			// Unknown CSI
+			return Key_Event{key = .Escape}, 1, true
+		}
+
+		// ESC followed by something else (e.g. Meta/Alt key)
+		// For now, treat as ESC
+		return Key_Event{key = .Escape}, 1, true
+	}
+
+	// Regular characters
+	// Handle Control characters
+	switch buf[0] {
+	case 13, 10:
+		return Key_Event{key = .Enter}, 1, true
+	case 127:
+		return Key_Event{key = .Backspace}, 1, true
+	case 9:
+		return Key_Event{key = .Tab}, 1, true
+	case 3:
+		return Key_Event{key = .Char, char = 'c', ctrl = true}, 1, true // Ctrl+C (often trapped by signal, but if raw)
+	}
+
+	// Default char
+	return Key_Event{key = .Char, char = rune(buf[0]), shift = false}, 1, true
+}
+
+read_key :: proc() -> Maybe(Key_Event) {
+	// Reuse read_input and filter
+	if event, ok := read_input().?; ok {
+		#partial switch e in event {
+		case Key_Event:
+			return e
+		}
+	}
 	return nil
 }
 
@@ -379,72 +403,35 @@ read_input :: proc() -> Maybe(Input_Event) {
 		}
 	} else {
 		// Unix/Linux/macOS
-		buf: [32]byte // Increased for mouse sequences
-		n, err := os.read(os.stdin, buf[:])
 
-		if err != nil || n == 0 {
+		// 1. Read available input into buffer
+		// Only read if we have space
+		if input_buffer_len < len(input_buffer) {
+			// Read into available space
+			available_buf := input_buffer[input_buffer_len:]
+			n, err := os.read(os.stdin, available_buf) // Non-blocking because VMIN=0/VTIME=0
+			if err == nil && n > 0 {
+				input_buffer_len += n
+			}
+		}
+
+		if input_buffer_len == 0 {
 			return nil
 		}
 
-		// Check for mouse event (ESC [ < ...)
-		if n >= 9 && buf[0] == 27 && buf[1] == '[' && buf[2] == '<' {
-			if mouse_event, ok := parse_sgr_mouse(buf[:], n).?; ok {
-				return mouse_event
-			}
-		}
+		// 2. Parse event
+		event, consumed, ok := parse_event_from_buffer(input_buffer[:input_buffer_len])
 
-		// Otherwise, parse as keyboard event
-		result := Key_Event {
-			key   = .Char,
-			char  = rune(buf[0]),
-			shift = false,
+		if ok {
+			// Shift remaining buffer
+			copy(input_buffer[:], input_buffer[consumed:input_buffer_len])
+			input_buffer_len -= consumed
+			return event
+		} else {
+			// Incomplete sequence or waiting for more data
+			// We keep the data in the buffer for next time
+			return nil
 		}
-
-		// Handle escape sequences
-		if buf[0] == 27 && n > 1 { 	// ESC
-			if buf[1] == '[' {
-				if n == 3 {
-					switch buf[2] {
-					case 'A':
-						result.key = .Up
-					case 'B':
-						result.key = .Down
-					case 'C':
-						result.key = .Right
-					case 'D':
-						result.key = .Left
-					}
-					return result
-				} else if n == 4 && buf[2] == 'Z' {
-					// Shift+Tab combination: ESC [ Z
-					result.key = .Tab
-					result.shift = true
-					return result
-				} else if n == 5 && buf[2] == '5' && buf[3] == '~' {
-					// Page Up: ESC [ 5 ~
-					result.key = .PageUp
-					return result
-				} else if n == 5 && buf[2] == '6' && buf[3] == '~' {
-					// Page Down: ESC [ 6 ~
-					result.key = .PageDown
-					return result
-				}
-			}
-			result.key = .Escape
-			return result
-		}
-
-		switch buf[0] {
-		case 13, 10:
-			// CR and LF (Enter key can be either)
-			result.key = .Enter
-		case 127:
-			result.key = .Backspace
-		case 9:
-			result.key = .Tab
-		}
-
-		return result
 	}
 
 	return nil

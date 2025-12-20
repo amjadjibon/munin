@@ -356,3 +356,95 @@ test_parse_sgr_mouse_wheel_with_modifiers :: proc(t: ^testing.T) {
 	testing.expect_value(t, event.button, Mouse_Button.WheelUp)
 	testing.expect_value(t, event.shift, true)
 }
+
+// Helper to create byte slice from string for testing
+to_bytes :: proc(s: string) -> []byte {
+	return transmute([]byte)s
+}
+
+@(test)
+test_parse_simple_char :: proc(t: ^testing.T) {
+	input := to_bytes("A")
+	event, consumed, ok := parse_event_from_buffer(input)
+
+	testing.expect(t, ok, "Should have parsed event")
+	testing.expect_value(t, consumed, 1)
+
+	if ok {
+		#partial switch e in event {
+		case Key_Event:
+			testing.expect_value(t, e.key, Key.Char)
+			testing.expect_value(t, e.char, 'A')
+		case:
+			testing.expect(t, false, "Expected Key_Event")
+		}
+	}
+}
+
+@(test)
+test_parse_multiple_chars :: proc(t: ^testing.T) {
+	input := to_bytes("AB")
+	event, consumed, ok := parse_event_from_buffer(input)
+
+	testing.expect(t, ok, "Should have parsed event")
+	testing.expect_value(t, consumed, 1)
+
+	if ok {
+		#partial switch e in event {
+		case Key_Event:
+			testing.expect_value(t, e.key, Key.Char)
+			testing.expect_value(t, e.char, 'A')
+		case:
+			testing.expect(t, false, "Expected Key_Event")
+		}
+	}
+}
+
+@(test)
+test_parse_escape_sequence_up :: proc(t: ^testing.T) {
+	input := to_bytes("\x1b[A")
+	event, consumed, ok := parse_event_from_buffer(input)
+
+	testing.expect(t, ok, "Should have parsed event")
+	testing.expect_value(t, consumed, 3)
+
+	if ok {
+		#partial switch e in event {
+		case Key_Event:
+			testing.expect_value(t, e.key, Key.Up)
+		case:
+			testing.expect(t, false, "Expected Key_Event")
+		}
+	}
+}
+
+@(test)
+test_parse_incomplete_escape :: proc(t: ^testing.T) {
+	input := to_bytes("\x1b[")
+	event, consumed, ok := parse_event_from_buffer(input)
+
+	testing.expect(t, !ok, "Should NOT have parsed event (incomplete)")
+	testing.expect_value(t, consumed, 0)
+}
+
+@(test)
+test_parse_sgr_mouse :: proc(t: ^testing.T) {
+	// Click left button at 10,20 (raw: <0;10;20M)
+	input := to_bytes("\x1b[<0;10;20M")
+	event, consumed, ok := parse_event_from_buffer(input)
+
+	testing.expect(t, ok, "Should have parsed mouse event")
+	testing.expect_value(t, consumed, 11) // ESC [ < 0 ; 1 0 ; 2 0 M (length 11)
+
+	if ok {
+		#partial switch e in event {
+		case Mouse_Event:
+			testing.expect_value(t, e.button, Mouse_Button.Left)
+			testing.expect_value(t, e.x, 9) // 1-based to 0-based
+			testing.expect_value(t, e.y, 19)
+			testing.expect_value(t, e.type, Mouse_Event_Type.Press)
+		case:
+			testing.expect(t, false, "Expected Mouse_Event")
+		}
+	}
+}
