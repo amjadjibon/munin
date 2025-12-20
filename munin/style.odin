@@ -314,7 +314,9 @@ style_render :: proc(s: Style, text: string) -> string {
 		strings.write_string(&b, "\n")
 	}
 
-	return strings.to_string(b)
+	res := strings.clone(strings.to_string(b))
+	strings.builder_destroy(&b)
+	return res
 }
 
 // ============================================================

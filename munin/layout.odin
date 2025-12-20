@@ -87,7 +87,9 @@ join_horizontal :: proc(position: Position, models: []string, gap: int = 0) -> s
 		}
 	}
 
-	return strings.to_string(b)
+	res := strings.clone(strings.to_string(b))
+	strings.builder_destroy(&b)
+	return res
 }
 
 join_vertical :: proc(position: Position, models: []string, gap: int = 0) -> string {
@@ -148,7 +150,9 @@ join_vertical :: proc(position: Position, models: []string, gap: int = 0) -> str
 		}
 	}
 
-	return strings.to_string(b)
+	res := strings.clone(strings.to_string(b))
+	strings.builder_destroy(&b)
+	return res
 }
 
 get_max_width :: proc(s: string) -> int {
