@@ -16,7 +16,7 @@ Model :: struct {
 }
 
 init :: proc() -> Model {
-	return Model{
+	return Model {
 		frame = 0,
 		selected_style = 0,
 		paused = false,
@@ -194,7 +194,7 @@ view :: proc(model: Model, buf: ^strings.Builder) {
 		y := start_y + 2 + row * 3
 
 		// Highlight selected style
-		label_color := munin.Color.White
+		label_color := munin.Basic_Color.White
 		if i == model.selected_style {
 			label_color = .BrightYellow
 			munin.print_at(buf, {x - 2, y}, ">", .BrightYellow)
@@ -266,7 +266,12 @@ view :: proc(model: Model, buf: ^strings.Builder) {
 	munin.print_at(buf, {2, instructions_y + 1}, "Controls:", .BrightWhite)
 	munin.print_at(buf, {2, instructions_y + 2}, "  ← → : Change spinner style", .White)
 	munin.print_at(buf, {2, instructions_y + 3}, "  SPACE : Pause/Resume animation", .White)
-	munin.print_at(buf, {2, instructions_y + 4}, "  R : Toggle rotation direction  |  Q : Quit", .White)
+	munin.print_at(
+		buf,
+		{2, instructions_y + 4},
+		"  R : Toggle rotation direction  |  Q : Quit",
+		.White,
+	)
 }
 
 // Subscription for animation ticks
@@ -289,7 +294,8 @@ input_handler :: proc() -> Maybe(Msg) {
 				return TogglePause{}
 			case 'r', 'R':
 				return ToggleDirection{}
-			case 'q', 'Q', 3: // q, Q, or Ctrl+C
+			case 'q', 'Q', 3:
+				// q, Q, or Ctrl+C
 				return Quit{}
 			}
 		}

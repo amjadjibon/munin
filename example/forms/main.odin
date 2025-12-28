@@ -288,7 +288,7 @@ subscriptions :: proc(model: Model) -> Maybe(Msg) {
 	current_time := time.now()
 	elapsed_ms := time.diff(last_blink_time, current_time) / time.Millisecond
 
-	if elapsed_ms >= 500 { // Blink every 500ms
+	if elapsed_ms >= 500 { 	// Blink every 500ms
 		last_blink_time = current_time
 		return BlinkCursor{}
 	}
@@ -740,7 +740,7 @@ view :: proc(model: Model, buf: ^strings.Builder) {
 	}
 
 	for i in 0 ..< len(forms) {
-		color := munin.Color.White
+		color := munin.Basic_Color.White
 		if i == model.current_form {
 			color = .BrightYellow
 		}

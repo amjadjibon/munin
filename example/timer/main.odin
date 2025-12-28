@@ -13,24 +13,24 @@ timer_initialized: bool
 
 // Model holds the application state
 Model :: struct {
-	remaining_time: time.Duration,
-	total_time: time.Duration,
-	timer_state: comp.Timer_State,
+	remaining_time:    time.Duration,
+	total_time:        time.Duration,
+	timer_state:       comp.Timer_State,
 	show_milliseconds: bool,
-	selected_preset: int,
-	current_demo: int,
-	last_tick: time.Time,
+	selected_preset:   int,
+	current_demo:      int,
+	last_tick:         time.Time,
 }
 
 init :: proc() -> Model {
 	return Model {
-		remaining_time = 60 * time.Second,
-		total_time = 60 * time.Second,
-		timer_state = .Ready,
+		remaining_time    = 60 * time.Second,
+		total_time        = 60 * time.Second,
+		timer_state       = .Ready,
 		show_milliseconds = false,
-		selected_preset = 2, // 1 minute
-		current_demo = 0,
-		last_tick = time.now(),
+		selected_preset   = 2, // 1 minute
+		current_demo      = 0,
+		last_tick         = time.now(),
 	}
 }
 
@@ -61,17 +61,17 @@ Msg :: union {
 
 // Get preset timer durations in seconds
 get_timer_presets :: proc() -> [10]int {
-	return [10]int{
-		5,      // 5 seconds
-		10,     // 10 seconds
-		30,     // 30 seconds
-		60,     // 1 minute
-		120,    // 2 minutes
-		300,    // 5 minutes
-		600,    // 10 minutes
-		900,    // 15 minutes
-		1800,   // 30 minutes
-		3600,   // 1 hour
+	return [10]int {
+		5, // 5 seconds
+		10, // 10 seconds
+		30, // 30 seconds
+		60, // 1 minute
+		120, // 2 minutes
+		300, // 5 minutes
+		600, // 10 minutes
+		900, // 15 minutes
+		1800, // 30 minutes
+		3600, // 1 hour
 	}
 }
 
@@ -156,7 +156,7 @@ view :: proc(model: Model, buf: ^strings.Builder) {
 	demos := []string{"Basic Timer", "Timer with Progress", "Boxed Timer", "Interactive Timer"}
 
 	for i in 0 ..< len(demos) {
-		color := munin.Color.White
+		color := munin.Basic_Color.White
 		if i == model.current_demo {
 			color = .BrightYellow
 		}
@@ -165,7 +165,7 @@ view :: proc(model: Model, buf: ^strings.Builder) {
 	}
 
 	// Current demo description
-	descriptions := []string{
+	descriptions := []string {
 		"Simple countdown timer with state indicators",
 		"Timer with circular progress bar visualization",
 		"Timer in styled box with controls hint",
@@ -187,7 +187,12 @@ draw_help :: proc(buf: ^strings.Builder) {
 	help_y := 22
 	munin.print_at(buf, {2, help_y}, "Controls:", .BrightWhite)
 	munin.print_at(buf, {2, help_y + 1}, "  ← → : Switch demos | 1-4 : Jump to demo", .White)
-	munin.print_at(buf, {2, help_y + 2}, "  Space : Start/Pause | R : Reset | M : Toggle milliseconds", .White)
+	munin.print_at(
+		buf,
+		{2, help_y + 2},
+		"  Space : Start/Pause | R : Reset | M : Toggle milliseconds",
+		.White,
+	)
 	munin.print_at(buf, {2, help_y + 3}, "  Q : Quit", .White)
 }
 
@@ -197,10 +202,14 @@ draw_demo :: proc(buf: ^strings.Builder, model: Model) {
 	demo_x := 10
 
 	switch model.current_demo {
-	case 0: draw_basic_timer_demo(buf, {demo_x, demo_y}, model)
-	case 1: draw_progress_timer_demo(buf, {demo_x, demo_y}, model)
-	case 2: draw_boxed_timer_demo(buf, {demo_x, demo_y}, model)
-	case 3: draw_interactive_timer_demo(buf, {demo_x, demo_y}, model)
+	case 0:
+		draw_basic_timer_demo(buf, {demo_x, demo_y}, model)
+	case 1:
+		draw_progress_timer_demo(buf, {demo_x, demo_y}, model)
+	case 2:
+		draw_boxed_timer_demo(buf, {demo_x, demo_y}, model)
+	case 3:
+		draw_interactive_timer_demo(buf, {demo_x, demo_y}, model)
 	}
 }
 
@@ -213,7 +222,13 @@ draw_basic_timer_demo :: proc(buf: ^strings.Builder, pos: munin.Vec2i, model: Mo
 	// Box starts at pos.x - 2, width 60, so center is at pos.x - 2 + 30 = pos.x + 28
 	// Timer text is about 12 characters long, so center it: pos.x + 28 - 6 = pos.x + 22
 	timer_x := pos.x + 22
-	comp.draw_timer(buf, {timer_x, pos.y + 3}, model.remaining_time, model.timer_state, model.show_milliseconds)
+	comp.draw_timer(
+		buf,
+		{timer_x, pos.y + 3},
+		model.remaining_time,
+		model.timer_state,
+		model.show_milliseconds,
+	)
 
 	// Show milliseconds setting
 	ms_text := model.show_milliseconds ? "ON" : "OFF"
@@ -235,13 +250,22 @@ draw_progress_timer_demo :: proc(buf: ^strings.Builder, pos: munin.Vec2i, model:
 	// Draw timer with progress - center the timer with progress bar
 	// Box center is at pos.x + 28, progress bar width 40, so center it at pos.x + 28 - 20 = pos.x + 8
 	timer_x := pos.x + 8
-	comp.draw_timer_with_progress(buf, {timer_x, pos.y + 2}, model.remaining_time, model.total_time, model.timer_state, 40)
+	comp.draw_timer_with_progress(
+		buf,
+		{timer_x, pos.y + 2},
+		model.remaining_time,
+		model.total_time,
+		model.timer_state,
+		40,
+	)
 
 	// Show percentage
 	percentage := 0
 	if model.total_time > 0 {
 		elapsed := model.total_time - model.remaining_time
-		percentage = int((time.duration_seconds(elapsed) / time.duration_seconds(model.total_time)) * 100)
+		percentage = int(
+			(time.duration_seconds(elapsed) / time.duration_seconds(model.total_time)) * 100,
+		)
 		percentage = clamp(percentage, 0, 100)
 	}
 
@@ -251,7 +275,15 @@ draw_progress_timer_demo :: proc(buf: ^strings.Builder, pos: munin.Vec2i, model:
 
 // Boxed timer demo
 draw_boxed_timer_demo :: proc(buf: ^strings.Builder, pos: munin.Vec2i, model: Model) {
-	comp.draw_timer_boxed(buf, pos, 56, model.remaining_time, model.total_time, model.timer_state, "Demo Timer")
+	comp.draw_timer_boxed(
+		buf,
+		pos,
+		56,
+		model.remaining_time,
+		model.total_time,
+		model.timer_state,
+		"Demo Timer",
+	)
 }
 
 // Interactive timer demo
@@ -262,7 +294,14 @@ draw_interactive_timer_demo :: proc(buf: ^strings.Builder, pos: munin.Vec2i, mod
 	// Draw timer - center the timer with progress bar
 	// Box center is at pos.x + 28, progress bar width 36, so center it at pos.x + 28 - 18 = pos.x + 10
 	timer_x := pos.x + 10
-	comp.draw_timer_with_progress(buf, {timer_x, pos.y + 1}, model.remaining_time, model.total_time, model.timer_state, 36)
+	comp.draw_timer_with_progress(
+		buf,
+		{timer_x, pos.y + 1},
+		model.remaining_time,
+		model.total_time,
+		model.timer_state,
+		36,
+	)
 
 	// Draw preset buttons
 	presets := get_timer_presets()
@@ -329,7 +368,7 @@ subscription :: proc(model: Model) -> Maybe(Msg) {
 	current_time := time.now()
 	elapsed_ms := time.diff(last_timer_update, current_time) / time.Millisecond
 
-	if elapsed_ms >= 50 { // Update every 50ms for smooth countdown
+	if elapsed_ms >= 50 { 	// Update every 50ms for smooth countdown
 		last_timer_update = current_time
 		if model.timer_state == .Running {
 			return Tick{}

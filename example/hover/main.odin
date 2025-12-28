@@ -1,17 +1,17 @@
 package main
 
-import munin "../../munin"
 import comp "../../components"
+import munin "../../munin"
 import "core:fmt"
 import "core:strings"
 
 // 1. Define your Model
 Button :: struct {
-	x, y:       int,
-	width:      int,
-	label:      string,
-	hovered:    bool,
-	clicked:    bool,
+	x, y:        int,
+	width:       int,
+	label:       string,
+	hovered:     bool,
+	clicked:     bool,
 	click_count: int,
 }
 
@@ -26,14 +26,14 @@ Model :: struct {
 }
 
 init :: proc() -> Model {
-	buttons := [4]Button{
+	buttons := [4]Button {
 		{x = 10, y = 5, width = 20, label = "Button 1"},
 		{x = 35, y = 5, width = 20, label = "Button 2"},
 		{x = 10, y = 9, width = 20, label = "Button 3"},
 		{x = 35, y = 9, width = 20, label = "Button 4"},
 	}
 
-	return Model{
+	return Model {
 		screen_width = 80,
 		screen_height = 24,
 		mouse_x = -1,
@@ -101,7 +101,8 @@ update :: proc(msg: Msg, model: Model) -> (Model, bool) {
 	case Key_Input:
 		if m.event.key == .Char {
 			switch m.event.char {
-			case 'q', 'Q', 3: // q, Q, or Ctrl+C
+			case 'q', 'Q', 3:
+				// q, Q, or Ctrl+C
 				should_quit = true
 			case 't', 'T':
 				// Toggle trail
@@ -129,7 +130,14 @@ view :: proc(model: Model, buf: ^strings.Builder) {
 	munin.clear_screen(buf)
 
 	// Title
-	comp.draw_banner(buf, {0, 0}, model.screen_width, "HOVER DEMO - Interactive Buttons", .BrightBlue, .White)
+	comp.draw_banner(
+		buf,
+		{0, 0},
+		model.screen_width,
+		"HOVER DEMO - Interactive Buttons",
+		.BrightBlue,
+		.White,
+	)
 
 	// Instructions
 	y := 2
@@ -138,8 +146,8 @@ view :: proc(model: Model, buf: ^strings.Builder) {
 
 	// Draw buttons
 	for btn in model.buttons {
-		bg_color := munin.Color.Blue
-		text_color := munin.Color.White
+		bg_color := munin.Basic_Color.Blue
+		text_color := munin.Basic_Color.White
 		border_char := "─"
 
 		if btn.clicked {
@@ -157,7 +165,7 @@ view :: proc(model: Model, buf: ^strings.Builder) {
 		munin.move_cursor(buf, {btn.x, btn.y})
 		munin.set_color(buf, bg_color)
 		strings.write_string(buf, "┌")
-		for i in 0..<btn.width-2 {
+		for i in 0 ..< btn.width - 2 {
 			strings.write_string(buf, border_char)
 		}
 		strings.write_string(buf, "┐")
@@ -172,11 +180,11 @@ view :: proc(model: Model, buf: ^strings.Builder) {
 
 		// Center text
 		padding := (btn.width - 2 - len(btn.label)) / 2
-		for i in 0..<padding {
+		for i in 0 ..< padding {
 			strings.write_byte(buf, ' ')
 		}
 		strings.write_string(buf, btn.label)
-		for i in 0..<(btn.width - 2 - len(btn.label) - padding) {
+		for i in 0 ..< (btn.width - 2 - len(btn.label) - padding) {
 			strings.write_byte(buf, ' ')
 		}
 		strings.write_string(buf, "│")
@@ -186,7 +194,7 @@ view :: proc(model: Model, buf: ^strings.Builder) {
 		munin.move_cursor(buf, {btn.x, btn.y + 2})
 		munin.set_color(buf, bg_color)
 		strings.write_string(buf, "└")
-		for i in 0..<btn.width-2 {
+		for i in 0 ..< btn.width - 2 {
 			strings.write_string(buf, border_char)
 		}
 		strings.write_string(buf, "┘")
@@ -194,16 +202,24 @@ view :: proc(model: Model, buf: ^strings.Builder) {
 
 		// Show click count below button
 		if btn.click_count > 0 {
-			munin.print_at(buf, {btn.x + btn.width/2 - 4, btn.y + 3}, fmt.tprintf("Clicks: %d", btn.click_count), .BrightMagenta)
+			munin.print_at(
+				buf,
+				{btn.x + btn.width / 2 - 4, btn.y + 3},
+				fmt.tprintf("Clicks: %d", btn.click_count),
+				.BrightMagenta,
+			)
 		}
 	}
 
 	// Draw hover trail if enabled
 	if model.show_trail {
 		for point, i in model.hover_trail {
-			if point.x >= 0 && point.x < model.screen_width && point.y >= 0 && point.y < model.screen_height {
+			if point.x >= 0 &&
+			   point.x < model.screen_width &&
+			   point.y >= 0 &&
+			   point.y < model.screen_height {
 				// Fade trail (older = darker)
-				color := munin.Color.BrightBlack
+				color := munin.Basic_Color.BrightBlack
 				if i > len(model.hover_trail) - 50 {
 					color = .BrightCyan
 				} else if i > len(model.hover_trail) - 100 {
@@ -215,8 +231,10 @@ view :: proc(model: Model, buf: ^strings.Builder) {
 	}
 
 	// Mouse cursor
-	if model.mouse_x >= 0 && model.mouse_x < model.screen_width &&
-	   model.mouse_y >= 0 && model.mouse_y < model.screen_height {
+	if model.mouse_x >= 0 &&
+	   model.mouse_x < model.screen_width &&
+	   model.mouse_y >= 0 &&
+	   model.mouse_y < model.screen_height {
 		munin.set_bold(buf)
 		munin.print_at(buf, {model.mouse_x, model.mouse_y}, "⊕", .BrightYellow)
 		munin.reset_style(buf)
@@ -227,7 +245,12 @@ view :: proc(model: Model, buf: ^strings.Builder) {
 	munin.print_at(buf, {2, status_y}, "Status:", .BrightYellow)
 	status_y += 1
 
-	munin.print_at(buf, {2, status_y}, fmt.tprintf("Mouse Position: (%d, %d)", model.mouse_x, model.mouse_y), .White)
+	munin.print_at(
+		buf,
+		{2, status_y},
+		fmt.tprintf("Mouse Position: (%d, %d)", model.mouse_x, model.mouse_y),
+		.White,
+	)
 	status_y += 1
 
 	hovered_button := -1
@@ -239,14 +262,19 @@ view :: proc(model: Model, buf: ^strings.Builder) {
 	}
 
 	if hovered_button > 0 {
-		munin.print_at(buf, {2, status_y}, fmt.tprintf("Hovering: Button %d", hovered_button), .BrightGreen)
+		munin.print_at(
+			buf,
+			{2, status_y},
+			fmt.tprintf("Hovering: Button %d", hovered_button),
+			.BrightGreen,
+		)
 	} else {
 		munin.print_at(buf, {2, status_y}, "Hovering: None", .BrightBlack)
 	}
 	status_y += 1
 
 	trail_status := "OFF" if !model.show_trail else "ON"
-	trail_color := munin.Color.BrightBlack if !model.show_trail else .BrightCyan
+	trail_color := munin.Basic_Color.BrightBlack if !model.show_trail else .BrightCyan
 	munin.print_at(buf, {2, status_y}, fmt.tprintf("Hover Trail: %s", trail_status), trail_color)
 
 	// Controls at bottom
