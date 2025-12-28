@@ -109,11 +109,11 @@ main :: proc() {
 
 ```bash
 # Build and run an example directly
-cd example/counter
+cd examples/counter
 odin run main.odin -file
 
 # Or build the example
-odin build example/counter -out:counter
+odin build examples/counter -out:counter
 ./counter
 
 # Run tests
@@ -122,7 +122,7 @@ odin test .
 ```
 
 ## Output
-<img src="./example/counter/counter.gif" alt="Counter Example" width="600">
+<img src="./examples/counter/counter.gif" alt="Counter Example" width="600">
 
 ## Core Concepts
 
@@ -521,11 +521,11 @@ Munin provides a set of reusable UI components in the `components` package:
 - **Text**: Text rendering with word wrap
 - **Timer**: Countdown and stopwatch timers
 
-See the `example/` directory and `docs/` for component documentation.
+See the `examples/` directory and `docs/` for component documentation.
 
 ## Examples
 
-The `example/` directory contains numerous examples demonstrating various features:
+The `examples/` directory contains numerous examples demonstrating various features:
 
 - **counter**: Basic counter app (canonical example)
 - **fstree**: Full file system tree viewer (like `tree` command)
@@ -600,7 +600,7 @@ Contributions are welcome! Please feel free to submit issues and pull requests.
 
 - [Styling & Layout Guide](docs/STYLE.md) - Comprehensive guide to the styling system
 - [Component Docs](docs/) - Individual component documentation
-- [Examples](example/) - Complete working examples
+- [Examples](examples/) - Complete working examples
 
 ## Acknowledgments
 

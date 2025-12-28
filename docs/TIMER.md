@@ -4,7 +4,7 @@ The Timer component provides countdown timer visualization with multiple display
 
 ## Overview
 
-Located in `components/timer.odin`, this component offers comprehensive countdown timer functionality with state management and various visual representations.
+Located in `munin/components/timer.odin`, this component offers comprehensive countdown timer functionality with state management and various visual representations.
 
 ## Timer State
 
@@ -184,7 +184,7 @@ draw_timer_presets(&buf, {5, 20}, presets, 2)  // 5m selected
 ### Basic Countdown Timer
 
 ```odin
-import "components"
+import "munin/components"
 import "core:strings"
 import "core:time"
 

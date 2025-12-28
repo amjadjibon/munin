@@ -4,7 +4,7 @@ The List component provides flexible list rendering with various marker styles, 
 
 ## Overview
 
-Located in `components/list.odin`, this component enables rendering of lists with different marker types, selection states, and scrolling capabilities for terminal interfaces.
+Located in `munin/components/list.odin`, this component enables rendering of lists with different marker types, selection states, and scrolling capabilities for terminal interfaces.
 
 ## List Styles
 
@@ -133,7 +133,7 @@ draw_list_scrollable(
 ### Basic Bullet List
 
 ```odin
-import "components"
+import "munin/components"
 import "core:strings"
 
 buf := strings.builder_make()

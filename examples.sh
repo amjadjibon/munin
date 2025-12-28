@@ -6,8 +6,8 @@ mkdir -p bin
 
 echo "Building examples..."
 
-# Iterate over matching directories in example/
-for dir in example/*; do
+# Iterate over matching directories in examples/
+for dir in examples/*; do
     if [ -d "$dir" ] && [ -f "$dir/main.odin" ]; then
         name=$(basename "$dir")
         echo "Building $name..."

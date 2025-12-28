@@ -4,7 +4,7 @@ The Input component provides a full-featured text input field with cursor manage
 
 ## Overview
 
-Located in `components/input.odin`, this component offers comprehensive text input functionality including password masking, cursor navigation, validation, and various visual styles.
+Located in `munin/components/input.odin`, this component offers comprehensive text input functionality including password masking, cursor navigation, validation, and various visual styles.
 
 ## Input Styles
 
@@ -270,7 +270,7 @@ draw_input_form :: proc(
 ### Basic Input Field
 
 ```odin
-import "components"
+import "munin/components"
 import "core:strings"
 
 // Create input state

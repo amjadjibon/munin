@@ -4,7 +4,7 @@ The Table component provides structured data display with column alignment, head
 
 ## Overview
 
-Located in `components/table.odin`, this component enables rendering of tabular data with customizable column widths, alignment options, and styled borders.
+Located in `munin/components/table.odin`, this component enables rendering of tabular data with customizable column widths, alignment options, and styled borders.
 
 ## Data Structures
 
@@ -87,7 +87,7 @@ draw_table(&buf, {5, 5}, columns, rows, .BrightCyan, .White)
 ### Basic Table
 
 ```odin
-import "components"
+import "munin/components"
 import "core:strings"
 
 buf := strings.builder_make()

@@ -4,7 +4,7 @@ The Spinner component provides animated loading indicators with multiple visual 
 
 ## Overview
 
-Located in `components/spinner.odin`, this component offers various animated spinner styles for indicating background processes, loading states, and ongoing operations.
+Located in `munin/components/spinner.odin`, this component offers various animated spinner styles for indicating background processes, loading states, and ongoing operations.
 
 ## Spinner Styles
 
@@ -89,7 +89,7 @@ frame_count := get_spinner_frame_count(.Dots)  // Returns 8
 ### Basic Spinner
 
 ```odin
-import "components"
+import "munin/components"
 import "core:strings"
 
 buf := strings.builder_make()

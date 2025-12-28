@@ -15,7 +15,7 @@ The tree component provides hierarchical data visualization with expandable/coll
 ## Basic Usage
 
 ```odin
-import "components"
+import "munin/components"
 import munin "munin"
 
 // Create tree nodes
@@ -216,7 +216,7 @@ fmt.println(output)
 ```odin
 package main
 
-import "components"
+import "munin/components"
 import munin "munin"
 import "core:strings"
 
@@ -381,4 +381,4 @@ Visible_Node :: struct {
 
 - [List Component](LIST.md) - For flat lists
 - [Styling Guide](STYLE.md) - For styling trees
-- [Examples](../example/tree/) - Complete working example
+- [Examples](../examples/tree/) - Complete working example
