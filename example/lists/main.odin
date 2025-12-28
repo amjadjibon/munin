@@ -8,19 +8,14 @@ import "core:strings"
 
 // Model holds the application state
 Model :: struct {
-	current_demo: int,
+	current_demo:   int,
 	selected_index: int,
-	scroll_offset: int,
-	show_help: bool,
+	scroll_offset:  int,
+	show_help:      bool,
 }
 
 init :: proc() -> Model {
-	return Model {
-		current_demo = 0,
-		selected_index = 0,
-		scroll_offset = 0,
-		show_help = true,
-	}
+	return Model{current_demo = 0, selected_index = 0, scroll_offset = 0, show_help = true}
 }
 
 // Messages define all possible events
@@ -105,13 +100,20 @@ update :: proc(msg: Msg, model: Model) -> (Model, bool) {
 // Get item count for current demo
 get_item_count :: proc(demo_index: int) -> int {
 	switch demo_index {
-	case 0: return 6  // Bullet list
-	case 1: return 8  // Numbered list
-	case 2: return 5  // Arrow list
-	case 3: return 7  // Checkbox list
-	case 4: return 12 // Scrollable list
-	case 5: return 6  // Colored list
-	case 6: return 10 // Mixed custom list
+	case 0:
+		return 6 // Bullet list
+	case 1:
+		return 8 // Numbered list
+	case 2:
+		return 5 // Arrow list
+	case 3:
+		return 7 // Checkbox list
+	case 4:
+		return 12 // Scrollable list
+	case 5:
+		return 6 // Colored list
+	case 6:
+		return 10 // Mixed custom list
 	}
 	return 0
 }
@@ -119,7 +121,8 @@ get_item_count :: proc(demo_index: int) -> int {
 // Handle item selection
 handle_item_selection :: proc(model: ^Model) {
 	switch model.current_demo {
-	case 3: // Checkbox demo
+	case 3:
+		// Checkbox demo
 		toggle_checkbox_at_index(model, model.selected_index)
 	}
 }
@@ -147,7 +150,7 @@ view :: proc(model: Model, buf: ^strings.Builder) {
 	demos := []string{"Bullet", "Numbered", "Arrow", "Checkbox", "Scrollable", "Colored", "Mixed"}
 
 	for i in 0 ..< len(demos) {
-		color := munin.Color.White
+		color := munin.Basic_Color.White
 		if i == model.current_demo {
 			color = .BrightYellow
 		}
@@ -156,7 +159,7 @@ view :: proc(model: Model, buf: ^strings.Builder) {
 	}
 
 	// Current demo description
-	descriptions := []string{
+	descriptions := []string {
 		"Bullet list with selection highlighting",
 		"Numbered list with sequential numbering",
 		"Arrow list with directional markers",
@@ -183,12 +186,22 @@ draw_help :: proc(buf: ^strings.Builder) {
 	help_y := 22
 	munin.print_at(buf, {2, help_y}, "Controls:", .BrightWhite)
 	munin.print_at(buf, {2, help_y + 1}, "  ← → : Switch demos | 1-7 : Jump to demo", .White)
-	munin.print_at(buf, {2, help_y + 2}, "  ↑ ↓ : Navigate items | Space/Enter : Select item", .White)
+	munin.print_at(
+		buf,
+		{2, help_y + 2},
+		"  ↑ ↓ : Navigate items | Space/Enter : Select item",
+		.White,
+	)
 
 	// Show scroll-specific controls for scrollable demo
 	demos := []string{"Bullet", "Numbered", "Arrow", "Checkbox", "Scrollable", "Colored", "Mixed"}
 	// Note: We can't access model here, so we'll show scroll controls in all demos
-	munin.print_at(buf, {2, help_y + 3}, "  Page Up/Down : Scroll list (when available) | H : Toggle help | Q : Quit", .White)
+	munin.print_at(
+		buf,
+		{2, help_y + 3},
+		"  Page Up/Down : Scroll list (when available) | H : Toggle help | Q : Quit",
+		.White,
+	)
 }
 
 // Draw the current demo
@@ -197,13 +210,20 @@ draw_demo :: proc(buf: ^strings.Builder, model: Model) {
 	demo_x := 10
 
 	switch model.current_demo {
-	case 0: draw_bullet_list_demo(buf, {demo_x, demo_y}, model)
-	case 1: draw_numbered_list_demo(buf, {demo_x, demo_y}, model)
-	case 2: draw_arrow_list_demo(buf, {demo_x, demo_y}, model)
-	case 3: draw_checkbox_list_demo(buf, {demo_x, demo_y}, model)
-	case 4: draw_scrollable_list_demo(buf, {demo_x, demo_y}, model)
-	case 5: draw_colored_list_demo(buf, {demo_x, demo_y}, model)
-	case 6: draw_mixed_list_demo(buf, {demo_x, demo_y}, model)
+	case 0:
+		draw_bullet_list_demo(buf, {demo_x, demo_y}, model)
+	case 1:
+		draw_numbered_list_demo(buf, {demo_x, demo_y}, model)
+	case 2:
+		draw_arrow_list_demo(buf, {demo_x, demo_y}, model)
+	case 3:
+		draw_checkbox_list_demo(buf, {demo_x, demo_y}, model)
+	case 4:
+		draw_scrollable_list_demo(buf, {demo_x, demo_y}, model)
+	case 5:
+		draw_colored_list_demo(buf, {demo_x, demo_y}, model)
+	case 6:
+		draw_mixed_list_demo(buf, {demo_x, demo_y}, model)
 	}
 }
 
@@ -212,7 +232,7 @@ draw_bullet_list_demo :: proc(buf: ^strings.Builder, pos: munin.Vec2i, model: Mo
 	comp.draw_box_styled(buf, {pos.x - 2, pos.y - 1}, 60, 8, .Rounded, .BrightBlue)
 	munin.print_at(buf, {pos.x + 20, pos.y - 1}, "BULLET LIST", .BrightWhite)
 
-	items := []comp.List_Item{
+	items := []comp.List_Item {
 		{"First item with bullet marker", false, .White},
 		{"Second item for demonstration", false, .BrightCyan},
 		{"Third item shows different color", false, .BrightYellow},
@@ -230,7 +250,7 @@ draw_numbered_list_demo :: proc(buf: ^strings.Builder, pos: munin.Vec2i, model: 
 	comp.draw_box_styled(buf, {pos.x - 2, pos.y - 1}, 60, 10, .Rounded, .BrightGreen)
 	munin.print_at(buf, {pos.x + 18, pos.y - 1}, "NUMBERED LIST", .BrightWhite)
 
-	items := []comp.List_Item{
+	items := []comp.List_Item {
 		{"Setup the development environment", false, .BrightCyan},
 		{"Install required dependencies", false, .BrightYellow},
 		{"Configure the project settings", false, .BrightGreen},
@@ -250,7 +270,7 @@ draw_arrow_list_demo :: proc(buf: ^strings.Builder, pos: munin.Vec2i, model: Mod
 	comp.draw_box_styled(buf, {pos.x - 2, pos.y - 1}, 60, 7, .Rounded, .BrightYellow)
 	munin.print_at(buf, {pos.x + 20, pos.y - 1}, "ARROW LIST", .BrightWhite)
 
-	items := []comp.List_Item{
+	items := []comp.List_Item {
 		{"Navigate to project directory", false, .BrightCyan},
 		{"Initialize the project structure", false, .BrightYellow},
 		{"Create configuration files", false, .BrightGreen},
@@ -267,7 +287,7 @@ draw_checkbox_list_demo :: proc(buf: ^strings.Builder, pos: munin.Vec2i, model: 
 	comp.draw_box_styled(buf, {pos.x - 2, pos.y - 1}, 60, 9, .Rounded, .BrightMagenta)
 	munin.print_at(buf, {pos.x + 18, pos.y - 1}, "CHECKBOX LIST", .BrightWhite)
 
-	items := []comp.List_Item{
+	items := []comp.List_Item {
 		{"Enable dark mode theme", true, .BrightGreen},
 		{"Show line numbers", false, .White},
 		{"Enable auto-save", true, .BrightGreen},
@@ -286,7 +306,7 @@ draw_scrollable_list_demo :: proc(buf: ^strings.Builder, pos: munin.Vec2i, model
 	comp.draw_box_styled(buf, {pos.x - 2, pos.y - 1}, 60, 12, .Rounded, .BrightCyan)
 	munin.print_at(buf, {pos.x + 15, pos.y - 1}, "SCROLLABLE LIST", .BrightWhite)
 
-	items := []comp.List_Item{
+	items := []comp.List_Item {
 		{"Alpha version features", false, .BrightCyan},
 		{"Beta testing phase", false, .BrightYellow},
 		{"Release candidate 1", false, .BrightGreen},
@@ -309,9 +329,17 @@ draw_scrollable_list_demo :: proc(buf: ^strings.Builder, pos: munin.Vec2i, model
 	adjusted_selected := clamped_selected - model.scroll_offset
 	// Clamp adjusted selected to visible range (or -1 if not visible)
 	if adjusted_selected < 0 || adjusted_selected >= 10 {
-		adjusted_selected = -1  // Not visible in viewport
+		adjusted_selected = -1 // Not visible in viewport
 	}
-	comp.draw_list_scrollable(buf, pos, 10, items, adjusted_selected, model.scroll_offset, comp.List_Style.Number)
+	comp.draw_list_scrollable(
+		buf,
+		pos,
+		10,
+		items,
+		adjusted_selected,
+		model.scroll_offset,
+		comp.List_Style.Number,
+	)
 }
 
 // Colored list demo
@@ -319,7 +347,7 @@ draw_colored_list_demo :: proc(buf: ^strings.Builder, pos: munin.Vec2i, model: M
 	comp.draw_box_styled(buf, {pos.x - 2, pos.y - 1}, 60, 8, .Rounded, .BrightRed)
 	munin.print_at(buf, {pos.x + 18, pos.y - 1}, "COLORED LIST", .BrightWhite)
 
-	items := []comp.List_Item{
+	items := []comp.List_Item {
 		{"Red item for emphasis", false, .BrightRed},
 		{"Green item for success", false, .BrightGreen},
 		{"Blue item for information", false, .BrightBlue},
@@ -339,7 +367,7 @@ draw_mixed_list_demo :: proc(buf: ^strings.Builder, pos: munin.Vec2i, model: Mod
 
 	// Draw different styles for demonstration
 	// First 2 items with bullets
-	bullet_items := []comp.List_Item{
+	bullet_items := []comp.List_Item {
 		{"Basic bullet item", false, .White},
 		{"Another bullet", false, .BrightCyan},
 	}
@@ -347,7 +375,7 @@ draw_mixed_list_demo :: proc(buf: ^strings.Builder, pos: munin.Vec2i, model: Mod
 	comp.draw_list(buf, pos, bullet_items, bullet_selected, comp.List_Style.Bullet)
 
 	// Next 2 items with arrows
-	arrow_items := []comp.List_Item{
+	arrow_items := []comp.List_Item {
 		{"Arrow navigation item", false, .BrightYellow},
 		{"Directional marker", false, .BrightGreen},
 	}
@@ -355,7 +383,7 @@ draw_mixed_list_demo :: proc(buf: ^strings.Builder, pos: munin.Vec2i, model: Mod
 	comp.draw_list(buf, {pos.x, pos.y + 2}, arrow_items, arrow_selected, comp.List_Style.Arrow)
 
 	// Next 2 items with numbers
-	number_items := []comp.List_Item{
+	number_items := []comp.List_Item {
 		{"Numbered step item", false, .BrightMagenta},
 		{"Sequential order", false, .BrightRed},
 	}
@@ -363,20 +391,34 @@ draw_mixed_list_demo :: proc(buf: ^strings.Builder, pos: munin.Vec2i, model: Mod
 	comp.draw_list(buf, {pos.x, pos.y + 4}, number_items, number_selected, comp.List_Style.Number)
 
 	// Next 2 items with custom markers
-	custom_items := []comp.List_Item{
+	custom_items := []comp.List_Item {
 		{"Star rated item", false, .BrightYellow},
 		{"Heart favorite item", false, .BrightRed},
 	}
 	custom_selected := min(max(model.selected_index - 6, 0), len(custom_items) - 1)
-	comp.draw_list(buf, {pos.x, pos.y + 6}, custom_items, custom_selected, comp.List_Style.Custom, "★")
+	comp.draw_list(
+		buf,
+		{pos.x, pos.y + 6},
+		custom_items,
+		custom_selected,
+		comp.List_Style.Custom,
+		"★",
+	)
 
 	// Last 2 items with different custom markers
-	custom_items2 := []comp.List_Item{
+	custom_items2 := []comp.List_Item {
 		{"Diamond premium item", false, .BrightCyan},
 		{"Check verified item", false, .BrightGreen},
 	}
 	custom_selected2 := min(max(model.selected_index - 8, 0), len(custom_items2) - 1)
-	comp.draw_list(buf, {pos.x, pos.y + 8}, custom_items2, custom_selected2, comp.List_Style.Custom, "◆")
+	comp.draw_list(
+		buf,
+		{pos.x, pos.y + 8},
+		custom_items2,
+		custom_selected2,
+		comp.List_Style.Custom,
+		"◆",
+	)
 }
 
 // Input handler processes keyboard events

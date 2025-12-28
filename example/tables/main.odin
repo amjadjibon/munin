@@ -10,15 +10,12 @@ import "core:time"
 // Model holds the application state
 Model :: struct {
 	current_demo: int,
-	show_help: bool,
+	show_help:    bool,
 }
 
 // Initialize model
 init :: proc() -> Model {
-	return Model {
-		current_demo = 0,
-		show_help = false,
-	}
+	return Model{current_demo = 0, show_help = false}
 }
 
 // Messages
@@ -67,7 +64,7 @@ view :: proc(model: Model, buf: ^strings.Builder) {
 	demos := []string{"Basic", "Products", "Employees", "Scores", "Mixed Align", "Wide Table"}
 
 	for i in 0 ..< len(demos) {
-		color := munin.Color.White
+		color := munin.Basic_Color.White
 		if i == model.current_demo {
 			color = .BrightYellow
 		}
@@ -76,7 +73,7 @@ view :: proc(model: Model, buf: ^strings.Builder) {
 	}
 
 	// Current demo description
-	descriptions := []string{
+	descriptions := []string {
 		"Simple 3-column table with basic data",
 		"Product catalog with prices and stock",
 		"Employee directory with contact info",
@@ -116,12 +113,18 @@ draw_demo :: proc(buf: ^strings.Builder, model: Model) {
 	demo_y := 8
 
 	switch model.current_demo {
-	case 0: draw_basic_table(buf, {5, demo_y})
-	case 1: draw_products_table(buf, {5, demo_y})
-	case 2: draw_employees_table(buf, {5, demo_y})
-	case 3: draw_scores_table(buf, {5, demo_y})
-	case 4: draw_mixed_align_table(buf, {5, demo_y})
-	case 5: draw_wide_table(buf, {2, demo_y})
+	case 0:
+		draw_basic_table(buf, {5, demo_y})
+	case 1:
+		draw_products_table(buf, {5, demo_y})
+	case 2:
+		draw_employees_table(buf, {5, demo_y})
+	case 3:
+		draw_scores_table(buf, {5, demo_y})
+	case 4:
+		draw_mixed_align_table(buf, {5, demo_y})
+	case 5:
+		draw_wide_table(buf, {2, demo_y})
 	}
 }
 
@@ -129,13 +132,13 @@ draw_demo :: proc(buf: ^strings.Builder, model: Model) {
 draw_basic_table :: proc(buf: ^strings.Builder, pos: munin.Vec2i) {
 	munin.print_at(buf, {pos.x, pos.y - 1}, "Basic 3-Column Table:", .BrightCyan)
 
-	columns := []comp.Table_Column{
+	columns := []comp.Table_Column {
 		{title = "ID", width = 8, align = .Center},
 		{title = "Name", width = 20, align = .Left},
 		{title = "Status", width = 12, align = .Center},
 	}
 
-	rows := [][]string{
+	rows := [][]string {
 		{"1", "Alice", "Active"},
 		{"2", "Bob", "Inactive"},
 		{"3", "Charlie", "Active"},
@@ -150,14 +153,14 @@ draw_basic_table :: proc(buf: ^strings.Builder, pos: munin.Vec2i) {
 draw_products_table :: proc(buf: ^strings.Builder, pos: munin.Vec2i) {
 	munin.print_at(buf, {pos.x, pos.y - 1}, "Product Catalog:", .BrightCyan)
 
-	columns := []comp.Table_Column{
+	columns := []comp.Table_Column {
 		{title = "SKU", width = 10, align = .Center},
 		{title = "Product Name", width = 25, align = .Left},
 		{title = "Price", width = 12, align = .Right},
 		{title = "Stock", width = 8, align = .Center},
 	}
 
-	rows := [][]string{
+	rows := [][]string {
 		{"SKU-001", "Wireless Mouse", "$29.99", "45"},
 		{"SKU-002", "Mechanical Keyboard", "$89.99", "12"},
 		{"SKU-003", "USB-C Cable", "$12.99", "230"},
@@ -173,14 +176,14 @@ draw_products_table :: proc(buf: ^strings.Builder, pos: munin.Vec2i) {
 draw_employees_table :: proc(buf: ^strings.Builder, pos: munin.Vec2i) {
 	munin.print_at(buf, {pos.x, pos.y - 1}, "Employee Directory:", .BrightCyan)
 
-	columns := []comp.Table_Column{
+	columns := []comp.Table_Column {
 		{title = "EMP ID", width = 8, align = .Center},
 		{title = "Full Name", width = 18, align = .Left},
 		{title = "Department", width = 15, align = .Left},
 		{title = "Email", width = 22, align = .Left},
 	}
 
-	rows := [][]string{
+	rows := [][]string {
 		{"E001", "John Smith", "Engineering", "john.s@company.com"},
 		{"E002", "Sarah Johnson", "Marketing", "sarah.j@company.com"},
 		{"E003", "Mike Davis", "Sales", "mike.d@company.com"},
@@ -195,7 +198,7 @@ draw_employees_table :: proc(buf: ^strings.Builder, pos: munin.Vec2i) {
 draw_scores_table :: proc(buf: ^strings.Builder, pos: munin.Vec2i) {
 	munin.print_at(buf, {pos.x, pos.y - 1}, "Student Test Scores:", .BrightCyan)
 
-	columns := []comp.Table_Column{
+	columns := []comp.Table_Column {
 		{title = "Student", width = 18, align = .Left},
 		{title = "Math", width = 8, align = .Center},
 		{title = "Science", width = 8, align = .Center},
@@ -203,13 +206,19 @@ draw_scores_table :: proc(buf: ^strings.Builder, pos: munin.Vec2i) {
 		{title = "Average", width = 8, align = .Center},
 	}
 
-	rows := [][]string{
+	rows := [][]string {
 		{"Alice Johnson", "95", "88", "92", "91.7"},
 		{"Bob Williams", "78", "85", "90", "84.3"},
 		{"Charlie Brown", "92", "94", "89", "91.7"},
 		{"Diana Martinez", "88", "91", "95", "91.3"},
 		{"Eve Anderson", "85", "87", "88", "86.7"},
-		{"─────────────", "────", "────", "────", "────"},
+		{
+			"─────────────",
+			"────",
+			"────",
+			"────",
+			"────",
+		},
 		{"Class Average", "87.6", "89.0", "90.8", "89.1"},
 	}
 
@@ -220,13 +229,13 @@ draw_scores_table :: proc(buf: ^strings.Builder, pos: munin.Vec2i) {
 draw_mixed_align_table :: proc(buf: ^strings.Builder, pos: munin.Vec2i) {
 	munin.print_at(buf, {pos.x, pos.y - 1}, "Mixed Alignment Demo:", .BrightCyan)
 
-	columns := []comp.Table_Column{
+	columns := []comp.Table_Column {
 		{title = "Left Aligned", width = 18, align = .Left},
 		{title = "Centered", width = 18, align = .Center},
 		{title = "Right Aligned", width = 18, align = .Right},
 	}
 
-	rows := [][]string{
+	rows := [][]string {
 		{"Left text", "Center text", "Right text"},
 		{"Short", "Mid length text", "X"},
 		{"A very long text", "Normal", "123456"},
@@ -240,7 +249,7 @@ draw_mixed_align_table :: proc(buf: ^strings.Builder, pos: munin.Vec2i) {
 draw_wide_table :: proc(buf: ^strings.Builder, pos: munin.Vec2i) {
 	munin.print_at(buf, {pos.x, pos.y - 1}, "Wide Multi-Column Table:", .BrightCyan)
 
-	columns := []comp.Table_Column{
+	columns := []comp.Table_Column {
 		{title = "ID", width = 5, align = .Center},
 		{title = "Name", width = 12, align = .Left},
 		{title = "Age", width = 5, align = .Center},
@@ -250,7 +259,7 @@ draw_wide_table :: proc(buf: ^strings.Builder, pos: munin.Vec2i) {
 		{title = "Status", width = 8, align = .Center},
 	}
 
-	rows := [][]string{
+	rows := [][]string {
 		{"001", "Alice Brown", "28", "New York", "Engineer", "$85,000", "Active"},
 		{"002", "Bob Smith", "34", "San Fran", "Designer", "$75,000", "Active"},
 		{"003", "Carol Lee", "29", "Seattle", "Manager", "$95,000", "Active"},
@@ -271,7 +280,8 @@ input_handler :: proc() -> Maybe(Msg) {
 			return NextDemo{}
 		case .Char:
 			switch event.char {
-			case 'q', 'Q', 3: // q, Q, or Ctrl+C
+			case 'q', 'Q', 3:
+				// q, Q, or Ctrl+C
 				return Quit{}
 			case 'h', 'H':
 				return ToggleHelp{}

@@ -25,7 +25,10 @@ test_get_window_size :: proc(t: ^testing.T) {
 	} else {
 		// In a test environment without a terminal, this might fail
 		// That's okay, we just verify the function returns properly
-		testing.fail_now(t, "get_window_size returned false (no terminal available)")
+		fmt.println(
+			"get_window_size returned false (no terminal available) - expected in headless/CI environments",
+		)
+		return
 	}
 }
 

@@ -49,7 +49,7 @@ draw_list :: proc(
     selected: int = -1,
     style: List_Style = .Bullet,
     custom_marker: string = "",
-    selected_color: munin.Color = .BrightYellow,
+    selected_color: munin.Color = munin.Basic_Color.BrightYellow,
     indent: int = 2,
 )
 ```

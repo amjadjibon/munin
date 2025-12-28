@@ -13,7 +13,7 @@ draw_text_wrapped :: proc(
 	pos: munin.Vec2i,
 	max_width: int,
 	text: string,
-	color: munin.Color = .White,
+	color: munin.Color = munin.Basic_Color.White,
 ) -> int {
 	words := strings.split(text, " ")
 	defer delete(words)
@@ -50,7 +50,7 @@ draw_heading :: proc(
 	pos: munin.Vec2i,
 	text: string,
 	level: int = 1,
-	color: munin.Color = .BrightCyan,
+	color: munin.Color = munin.Basic_Color.BrightCyan,
 ) {
 	munin.set_bold(buf)
 	munin.print_at(buf, {pos.x, pos.y}, text, color)
@@ -84,8 +84,8 @@ draw_banner :: proc(
 	pos: munin.Vec2i,
 	width: int,
 	text: string,
-	bg_color: munin.Color = .BrightBlue,
-	text_color: munin.Color = .White,
+	bg_color: munin.Color = munin.Basic_Color.BrightBlue,
+	text_color: munin.Color = munin.Basic_Color.White,
 ) {
 	// Calculate centered position
 	padding := (width - len(text)) / 2
@@ -112,11 +112,11 @@ draw_label_value :: proc(
 	buf: ^strings.Builder,
 	pos: munin.Vec2i,
 	label, value: string,
-	label_color: munin.Color = .BrightYellow,
-	value_color: munin.Color = .White,
+	label_color: munin.Color = munin.Basic_Color.BrightYellow,
+	value_color: munin.Color = munin.Basic_Color.White,
 	separator: string = ": ",
 ) {
 	munin.print_at(buf, pos, label, label_color)
-	munin.print_at(buf, {pos.x + len(label), pos.y}, separator, .BrightBlue)
+	munin.print_at(buf, {pos.x + len(label), pos.y}, separator, munin.Basic_Color.BrightBlue)
 	munin.print_at(buf, {pos.x + len(label) + len(separator), pos.y}, value, value_color)
 }

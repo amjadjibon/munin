@@ -6,9 +6,13 @@ A lightweight, elegant Terminal UI (TUI) framework for Odin, inspired by the Elm
 
 - **Elm Architecture Pattern**: Clean separation of Model, Update, and View
 - **Cross-Platform**: Works on Linux, macOS, and Windows
-- **Event-Driven Rendering**: Only redraws when state changes
+- **Event-Driven Rendering**: Only redraws when state changes or window resizes
 - **Window Resize Detection**: Automatically detects and responds to terminal resize events
-- **Rich Color Support**: 16 ANSI colors with bright variants
+- **Mouse Support**: Full mouse tracking including clicks, drags, and hover events
+- **Screen Modes**: Fullscreen (alternative buffer) or inline rendering
+- **Advanced Color Support**: Basic ANSI colors, 24-bit RGB, and 256-color palette
+- **Styling**: Fluent API for styling with borders, padding, margins, and layout
+- **Reusable Components**: Pre-built components for lists, tables, inputs, spinners, and more
 - **Memory Safe**: Built-in allocator support with debug-time memory tracking
 - **Zero Dependencies**: Uses only Odin core libraries
 
@@ -104,11 +108,17 @@ main :: proc() {
 ## Building and Running
 
 ```bash
-# Build the example
-odin build example/counter -out:counter
+# Build and run an example directly
+cd example/counter
+odin run main.odin -file
 
-# Run the example
+# Or build the example
+odin build example/counter -out:counter
 ./counter
+
+# Run tests
+cd munin
+odin test .
 ```
 
 ## Output
@@ -133,11 +143,13 @@ program := munin.make_program(init, update, view)
 // Or create a program with subscriptions (for time-based events)
 program := munin.make_program(init, update, view, subscriptions)
 
-// Run the program
-munin.run(&program, input_handler, target_fps = 60)
+// Run the program with optional parameters
+munin.run(&program, input_handler, target_fps = 60, initial_mode = .Fullscreen, clear_on_exit = true)
 ```
 
 ## API Reference
+
+> **New!** Check out the [Styling & Layout Guide](docs/STYLE.md).
 
 ### Core Functions
 
@@ -167,6 +179,8 @@ run :: proc(
     program: ^Program(Model, Msg),
     input_handler: proc() -> Maybe(Msg),
     target_fps: i64 = 60,
+    initial_mode: Screen_Mode = .Fullscreen,  // .Fullscreen or .Inline
+    clear_on_exit: bool = true,
 )
 ```
 
@@ -244,38 +258,84 @@ munin.print_at(buf, {10, 5}, "Hello", .Green)
 ```
 
 #### `Color`
-Available colors:
+Color is a union type supporting multiple color formats:
 ```odin
-Color :: enum {
+// Basic ANSI colors (16 colors)
+Basic_Color :: enum {
     Reset,
-    // Standard colors
     Black, Red, Green, Yellow, Blue, Magenta, Cyan, White,
-    // Bright colors
     BrightBlack, BrightRed, BrightGreen, BrightYellow,
     BrightBlue, BrightMagenta, BrightCyan, BrightWhite,
-    // Aliases
-    Gray,  // Same as BrightBlack
+    Gray,  // Alias for BrightBlack
 }
+
+// 24-bit RGB color
+RGB :: struct { r, g, b: u8 }
+
+// 256-color palette (0-255)
+ANSI256 :: distinct u8
+
+// Union type
+Color :: union { Basic_Color, RGB, ANSI256 }
+
+// Usage examples
+munin.print_at(buf, {0, 0}, "Basic color", .Red)
+munin.print_at(buf, {0, 1}, "RGB color", RGB{255, 0, 128})
+munin.print_at(buf, {0, 2}, "256 color", ANSI256(208))
 ```
 
 #### `Key_Event`
 ```odin
 Key_Event :: struct {
-    key:  Key_Type,
-    char: rune,
+    key:   Key,
+    char:  rune,
+    shift: bool,
+    ctrl:  bool,
+    alt:   bool,
 }
 
-Key_Type :: enum {
+Key :: enum {
+    Unknown,
     Char,
     Up,
     Down,
     Left,
     Right,
     Enter,
-    Backspace,
-    Delete,
     Escape,
+    Backspace,
     Tab,
+    PageUp,
+    PageDown,
+}
+```
+
+#### `Mouse_Event`
+```odin
+Mouse_Event :: struct {
+    button: Mouse_Button,
+    type:   Mouse_Event_Type,
+    x:      int,
+    y:      int,
+    shift:  bool,
+    ctrl:   bool,
+    alt:    bool,
+}
+
+Mouse_Button :: enum {
+    None,
+    Left,
+    Right,
+    Middle,
+    WheelUp,
+    WheelDown,
+}
+
+Mouse_Event_Type :: enum {
+    Press,
+    Release,
+    Drag,
+    Move,
 }
 ```
 
@@ -362,31 +422,171 @@ main :: proc() {
 }
 ```
 
+### Screen Modes
+
+Munin supports two rendering modes:
+
+```odin
+// Fullscreen mode (alternative screen buffer - default)
+munin.run(&program, input_handler, initial_mode = .Fullscreen)
+
+// Inline mode (renders in-place like a regular CLI app)
+munin.run(&program, input_handler, initial_mode = .Inline)
+
+// Toggle modes at runtime
+munin.toggle_screen_mode(&program)
+munin.set_screen_mode(&program, .Inline)
+```
+
+### Mouse Input
+
+Mouse tracking is automatically enabled. Handle mouse events in your input handler:
+
+```odin
+input_handler :: proc() -> Maybe(Msg) {
+    if event, ok := munin.read_input().?; ok {
+        switch e in event {
+        case munin.Key_Event:
+            // Handle keyboard
+        case munin.Mouse_Event:
+            if e.button == .Left && e.type == .Press {
+                return Click{x = e.x, y = e.y}
+            }
+        }
+    }
+    return nil
+}
+```
+
+### Styling System
+
+Munin includes a powerful styling system:
+
+```odin
+import munin "path/to/munin"
+
+// Create a styled box
+style := munin.new_style()
+style = munin.style_foreground(style, .BrightCyan)
+style = munin.style_background_str(style, "#1e1e1e")
+style = munin.style_bold(style)
+style = munin.style_padding_all(style, 1)
+style = munin.style_border(style, munin.Border_Rounded)
+style = munin.style_border_foreground(style, .BrightMagenta)
+style = munin.style_width(style, 40)
+
+output := munin.style_render(style, "Hello, Munin!")
+defer delete(output)  // Important: must delete returned string
+
+fmt.println(output)
+```
+
+#### Layout Composition
+
+Compose multiple styled blocks:
+
+```odin
+// Horizontal layout
+left := munin.style_render(style_left, "Left Panel")
+defer delete(left)
+right := munin.style_render(style_right, "Right Panel")
+defer delete(right)
+
+joined := munin.join_horizontal(.Center, {left, right}, gap = 2)
+defer delete(joined)
+
+// Vertical layout
+top := munin.style_render(style_top, "Header")
+defer delete(top)
+bottom := munin.style_render(style_bottom, "Footer")
+defer delete(bottom)
+
+stacked := munin.join_vertical(.Left, {top, bottom}, gap = 1)
+defer delete(stacked)
+```
+
+See [docs/STYLE.md](docs/STYLE.md) for complete styling documentation.
+
+## Components
+
+Munin provides a set of reusable UI components in the `components` package:
+
+- **Box**: Customizable boxes with borders
+- **Input**: Text input fields
+- **List**: Lists with multiple styles (bullet, numbered, checkboxes)
+- **Pagination**: Page navigation component
+- **Progress**: Progress bars
+- **Spinner**: Loading spinners with various styles
+- **Table**: Data tables with headers and rows
+- **Text**: Text rendering with word wrap
+- **Timer**: Countdown and stopwatch timers
+
+See the `example/` directory and `docs/` for component documentation.
+
 ## Examples
 
-Check out the `example/counter` directory for a complete, feature-rich example that demonstrates:
+The `example/` directory contains numerous examples demonstrating various features:
 
+- **counter**: Basic counter app (canonical example)
+- **fstree**: Full file system tree viewer (like `tree` command)
+- **tree**: Tree component demo with sample data
+- **style**: Lipgloss-inspired styling system
+- **mouse**: Mouse input and click handling
+- **hover**: Hover effects and tracking
+- **lists**: Various list styles and scrolling
+- **tables**: Data table rendering
+- **forms**: Input forms with validation
+- **spinners**: Loading animations
+- **progress**: Progress bar implementations
+- **timer**: Countdown and elapsed time
+- **pagination**: Multi-page navigation
+- **inline**: Inline rendering mode
+- **boxes**: Border and box styles
+- **colors**: Color palette showcase
+
+Each example demonstrates:
 - Responsive layout that adapts to terminal size
-- Colored box drawing
-- Text styling and formatting
-- Keyboard input handling
-- Memory tracking in debug builds
+- Colored rendering and styling
+- Input handling (keyboard and/or mouse)
+- Memory safety with tracking allocators
 
 ## Performance Tips
 
-1. **Event-Driven Rendering**: Munin only redraws when state changes. Avoid setting `needs_redraw` unnecessarily.
+1. **Event-Driven Rendering**: Munin only redraws when state changes, window resizes, or subscriptions fire. This minimizes CPU usage and rendering overhead.
 
-2. **String Builder Efficiency**: The framework uses a pre-allocated string builder (4KB default) to minimize allocations.
+2. **String Builder Efficiency**: The framework uses a pre-allocated string builder (4KB default) to minimize allocations during rendering.
 
-3. **Frame Rate Control**: Set an appropriate `target_fps` based on your needs. 60 FPS is the default, but 30 FPS is often sufficient.
+3. **Frame Rate Control**: Set an appropriate `target_fps` based on your needs. 60 FPS is the default, but 30 FPS is often sufficient for most TUI apps.
 
 4. **Minimize View Complexity**: Keep your view function efficient since it's called every frame when redrawing.
 
+5. **Memory Management**: Style render functions (`style_render`, `join_horizontal`, `join_vertical`) return heap-allocated strings. Always `delete()` them after use to prevent memory leaks.
+
+6. **Use Temp Allocator**: For temporary allocations within the view function, use `context.temp_allocator` which is automatically cleared at the end of each frame.
+
+## Testing
+
+Run the test suite:
+
+```bash
+cd munin
+odin test .
+```
+
+The tests cover:
+- ANSI escape sequence stripping
+- Line counting with Unicode and wide characters
+- Terminal mode setup and teardown
+- Input parsing for keyboard and mouse events
+- Rendering utility functions
+
 ## Platform Support
 
-- **Linux**: Full support
-- **macOS**: Full support
-- **Windows**: Not supported
+- **Linux**: Full support (POSIX termios for raw mode)
+- **macOS**: Full support (POSIX termios for raw mode)
+- **Windows**: Partial support (Win32 console APIs with virtual terminal processing)
+
+**Note**: Windows support is implemented in the codebase but may have limitations. Testing on Windows is recommended.
 
 ## License
 
@@ -396,9 +596,16 @@ This project is open source. See LICENSE file for details.
 
 Contributions are welcome! Please feel free to submit issues and pull requests.
 
+## Documentation
+
+- [Styling & Layout Guide](docs/STYLE.md) - Comprehensive guide to the styling system
+- [Component Docs](docs/) - Individual component documentation
+- [Examples](example/) - Complete working examples
+
 ## Acknowledgments
 
 Inspired by:
 - The Elm Architecture
 - Bubble Tea (Go TUI framework)
+- Lipgloss (Go styling library)
 - Termbox and other terminal libraries

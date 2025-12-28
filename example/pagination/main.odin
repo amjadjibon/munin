@@ -19,7 +19,7 @@ Model :: struct {
 
 // Initialize model
 init :: proc() -> Model {
-	return Model{
+	return Model {
 		current_demo   = 0,
 		show_help      = false,
 		current_page   = 1,
@@ -94,7 +94,7 @@ view :: proc(model: Model, buf: ^strings.Builder) {
 	demos := []string{"Numbers", "Arrows", "Dots", "Compact", "With Info", "Table"}
 
 	for i in 0 ..< len(demos) {
-		color := munin.Color.White
+		color := munin.Basic_Color.White
 		if i == model.current_demo {
 			color = .BrightYellow
 		}
@@ -103,7 +103,7 @@ view :: proc(model: Model, buf: ^strings.Builder) {
 	}
 
 	// Current demo description
-	descriptions := []string{
+	descriptions := []string {
 		"Standard numbered pagination with ellipsis",
 		"Simple arrow-based navigation with page count",
 		"Visual dot indicators for pages",
@@ -352,7 +352,7 @@ draw_table_with_pagination :: proc(
 	// Generate sample data
 	all_users := make([]User, total_items, context.temp_allocator)
 	for i in 0 ..< total_items {
-		all_users[i] = User{
+		all_users[i] = User {
 			id    = i + 1,
 			name  = fmt.tprintf("User %d", i + 1),
 			email = fmt.tprintf("user%d@example.com", i + 1),
@@ -364,7 +364,7 @@ draw_table_with_pagination :: proc(
 	page_users := comp.get_page_slice(all_users[:], current_page, items_per_page)
 
 	// Draw table
-	columns := []comp.Table_Column{
+	columns := []comp.Table_Column {
 		{title = "ID", width = 6, align = .Center},
 		{title = "Name", width = 15, align = .Left},
 		{title = "Email", width = 25, align = .Left},
@@ -373,12 +373,7 @@ draw_table_with_pagination :: proc(
 
 	rows := make([][]string, len(page_users), context.temp_allocator)
 	for user, i in page_users {
-		rows[i] = []string{
-			fmt.tprintf("%d", user.id),
-			user.name,
-			user.email,
-			user.role,
-		}
+		rows[i] = []string{fmt.tprintf("%d", user.id), user.name, user.email, user.role}
 	}
 
 	comp.draw_table(buf, {pos.x, pos.y + 1}, columns, rows, .BrightGreen, .BrightCyan)
@@ -415,7 +410,8 @@ input_handler :: proc() -> Maybe(Msg) {
 			return NextDemo{}
 		case .Char:
 			switch event.char {
-			case 'q', 'Q', 3: // q, Q, or Ctrl+C
+			case 'q', 'Q', 3:
+				// q, Q, or Ctrl+C
 				return Quit{}
 			case 'h', 'H':
 				return ToggleHelp{}

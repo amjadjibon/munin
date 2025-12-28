@@ -20,7 +20,7 @@ Model :: struct {
 }
 
 init :: proc() -> Model {
-	return Model{
+	return Model {
 		screen_width = 80,
 		screen_height = 24,
 		last_mouse_x = -1,
@@ -87,7 +87,8 @@ update :: proc(msg: Msg, model: Model) -> (Model, bool) {
 	case Key_Input:
 		if m.event.key == .Char {
 			switch m.event.char {
-			case 'q', 'Q', 3: // q, Q, or Ctrl+C
+			case 'q', 'Q', 3:
+				// q, Q, or Ctrl+C
 				should_quit = true
 			case 'c', 'C':
 				// Clear all counts
@@ -122,7 +123,12 @@ view :: proc(model: Model, buf: ^strings.Builder) {
 	y := 3
 	munin.print_at(buf, {2, y}, "Mouse Position:", .BrightYellow)
 	if model.last_mouse_x >= 0 {
-		munin.print_at(buf, {18, y}, fmt.tprintf("X: %3d, Y: %3d", model.last_mouse_x, model.last_mouse_y), .White)
+		munin.print_at(
+			buf,
+			{18, y},
+			fmt.tprintf("X: %3d, Y: %3d", model.last_mouse_x, model.last_mouse_y),
+			.White,
+		)
 	} else {
 		munin.print_at(buf, {18, y}, "Move mouse to see position", .BrightBlack)
 	}
@@ -130,7 +136,7 @@ view :: proc(model: Model, buf: ^strings.Builder) {
 
 	munin.print_at(buf, {2, y}, "Last Button:", .BrightYellow)
 	button_str := ""
-	button_color := munin.Color.White
+	button_color := munin.Basic_Color.White
 	switch model.last_button {
 	case .None:
 		button_str = "None"
@@ -156,7 +162,7 @@ view :: proc(model: Model, buf: ^strings.Builder) {
 
 	munin.print_at(buf, {2, y}, "Last Event:", .BrightYellow)
 	event_str := ""
-	event_color := munin.Color.White
+	event_color := munin.Basic_Color.White
 	switch model.last_event {
 	case .Press:
 		event_str = "Press"
@@ -180,14 +186,22 @@ view :: proc(model: Model, buf: ^strings.Builder) {
 
 	munin.print_at(buf, {2, y}, "Scroll Count:", .BrightYellow)
 	munin.print_at(buf, {17, y}, fmt.tprintf("%d", model.scroll_count), .BrightCyan)
-	munin.print_at(buf, {22, y}, fmt.tprintf("(↑%d ↓%d)", model.scroll_up, model.scroll_down), .BrightBlack)
+	munin.print_at(
+		buf,
+		{22, y},
+		fmt.tprintf("(↑%d ↓%d)", model.scroll_up, model.scroll_down),
+		.BrightBlack,
+	)
 	y += 2
 
 	// Draw drag trail
 	if len(model.drag_path) > 0 {
 		munin.print_at(buf, {2, y}, "Drag Trail:", .BrightYellow)
 		for point in model.drag_path {
-			if point.x >= 0 && point.x < model.screen_width && point.y >= 0 && point.y < model.screen_height {
+			if point.x >= 0 &&
+			   point.x < model.screen_width &&
+			   point.y >= 0 &&
+			   point.y < model.screen_height {
 				munin.print_at(buf, point, "*", .BrightCyan)
 			}
 		}
@@ -195,10 +209,12 @@ view :: proc(model: Model, buf: ^strings.Builder) {
 	}
 
 	// Draw cursor at mouse position
-	if model.last_mouse_x >= 0 && model.last_mouse_x < model.screen_width &&
-	   model.last_mouse_y >= 0 && model.last_mouse_y < model.screen_height {
+	if model.last_mouse_x >= 0 &&
+	   model.last_mouse_x < model.screen_width &&
+	   model.last_mouse_y >= 0 &&
+	   model.last_mouse_y < model.screen_height {
 		cursor_char := "+"
-		cursor_color := munin.Color.BrightGreen
+		cursor_color := munin.Basic_Color.BrightGreen
 
 		switch model.last_button {
 		case .Left:

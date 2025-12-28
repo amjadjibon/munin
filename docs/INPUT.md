@@ -213,10 +213,10 @@ draw_input :: proc(
     width: int,
     style: Input_Style = .Box,
     label: string = "",
-    label_color: munin.Color = .BrightYellow,
-    text_color: munin.Color = .White,
-    cursor_color: munin.Color = .BrightGreen,
-    placeholder_color: munin.Color = .BrightBlue,
+    label_color: munin.Color = munin.Basic_Color.BrightYellow,
+    text_color: munin.Color = munin.Basic_Color.White,
+    cursor_color: munin.Color = munin.Basic_Color.BrightGreen,
+    placeholder_color: munin.Color = munin.Basic_Color.BrightBlue,
 )
 ```
 

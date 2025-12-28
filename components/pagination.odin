@@ -23,9 +23,9 @@ draw_pagination :: proc(
 	total_pages: int,
 	style: Pagination_Style = .Numbers,
 	max_visible: int = 7,
-	active_color: munin.Color = .BrightCyan,
-	normal_color: munin.Color = .White,
-	disabled_color: munin.Color = .BrightBlue,
+	active_color: munin.Color = munin.Basic_Color.BrightCyan,
+	normal_color: munin.Color = munin.Basic_Color.White,
+	disabled_color: munin.Color = munin.Basic_Color.BrightBlue,
 ) {
 	if total_pages <= 0 {
 		return
@@ -152,9 +152,9 @@ draw_pagination_with_info :: proc(
 		total_pages,
 		style,
 		7,
-		.BrightCyan,
-		.White,
-		.BrightBlue,
+		munin.Basic_Color.BrightCyan,
+		munin.Basic_Color.White,
+		munin.Basic_Color.BrightBlue,
 	)
 
 	// Draw item info
@@ -162,7 +162,7 @@ draw_pagination_with_info :: proc(
 	end_item := min(current_page * items_per_page, total_items)
 
 	info_text := fmt.tprintf("Showing %d-%d of %d items", start_item, end_item, total_items)
-	munin.print_at(buf, {pos.x, pos.y + 2}, info_text, .BrightBlue)
+	munin.print_at(buf, {pos.x, pos.y + 2}, info_text, munin.Basic_Color.BrightBlue)
 }
 
 // Calculate total pages from item count

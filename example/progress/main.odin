@@ -18,7 +18,7 @@ Model :: struct {
 }
 
 init :: proc() -> Model {
-	return Model{
+	return Model {
 		progress1 = 0,
 		progress2 = 25,
 		progress3 = 60,
@@ -170,7 +170,7 @@ view :: proc(model: Model, buf: ^strings.Builder) {
 	// Show all 5 styles with 50% progress
 	for i in 0 ..< len(styles) {
 		y := start_y + 2 + i * 2
-		label_color := munin.Color.White
+		label_color := munin.Basic_Color.White
 		if i == model.selected_style {
 			label_color = .BrightYellow
 			munin.print_at(buf, {2, y}, ">", .BrightYellow)
@@ -289,7 +289,15 @@ view :: proc(model: Model, buf: ^strings.Builder) {
 	vertical_x := 70
 	munin.print_at(buf, {vertical_x, start_y}, "Vertical:", .BrightWhite)
 
-	comp.draw_progress_bar_vertical(buf, vertical_x, start_y + 2, 15, model.progress1, .BrightCyan, .BrightBlack)
+	comp.draw_progress_bar_vertical(
+		buf,
+		vertical_x,
+		start_y + 2,
+		15,
+		model.progress1,
+		.BrightCyan,
+		.BrightBlack,
+	)
 	comp.draw_progress_bar_vertical(
 		buf,
 		vertical_x + 3,
@@ -346,7 +354,8 @@ input_handler :: proc() -> Maybe(Msg) {
 				return TogglePause{}
 			case 'r', 'R':
 				return Reset{}
-			case 'q', 'Q', 3: // q, Q, or Ctrl+C
+			case 'q', 'Q', 3:
+				// q, Q, or Ctrl+C
 				return Quit{}
 			}
 		}

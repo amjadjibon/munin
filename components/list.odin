@@ -30,7 +30,7 @@ draw_list :: proc(
 	selected: int = -1,
 	style: List_Style = .Bullet,
 	custom_marker: string = "",
-	selected_color: munin.Color = .BrightYellow,
+	selected_color: munin.Color = munin.Basic_Color.BrightYellow,
 	indent: int = 2,
 ) {
 	for item, i in items {
@@ -46,7 +46,8 @@ draw_list :: proc(
 
 		// Draw marker based on style
 		marker := ""
-		marker_color := item.color != .Reset ? item.color : munin.Color.White
+		marker_color :=
+			!munin.is_color_reset(item.color) ? item.color : munin.Color(munin.Basic_Color.White)
 
 		switch style {
 		case .Bullet:
@@ -57,7 +58,7 @@ draw_list :: proc(
 			marker = "→"
 		case .Checkbox:
 			marker = item.checked ? "[✓]" : "[ ]"
-			marker_color = item.checked ? munin.Color.BrightGreen : munin.Color.White
+			marker_color = item.checked ? munin.Basic_Color.BrightGreen : munin.Basic_Color.White
 		case .Custom:
 			marker = custom_marker
 		}
@@ -66,7 +67,8 @@ draw_list :: proc(
 
 		// Draw text with color and selection highlight
 		text_x := marker_x + len(marker) + 1
-		text_color := item.color != .Reset ? item.color : munin.Color.White
+		text_color :=
+			!munin.is_color_reset(item.color) ? item.color : munin.Color(munin.Basic_Color.White)
 
 		if is_selected {
 			munin.set_bold(buf)

@@ -37,11 +37,11 @@ show_cursor :: proc(buf: ^strings.Builder) {
 }
 
 set_color :: proc(buf: ^strings.Builder, color: Color) {
-	strings.write_string(buf, ANSI_FG_CODES[color])
+	strings.write_string(buf, color_to_ansi(color, false))
 }
 
 set_bg_color :: proc(buf: ^strings.Builder, color: Color) {
-	strings.write_string(buf, ANSI_BG_CODES[color])
+	strings.write_string(buf, color_to_ansi(color, true))
 }
 
 set_bold :: proc(buf: ^strings.Builder) {

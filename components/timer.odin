@@ -23,8 +23,8 @@ draw_timer :: proc(
 	remaining: time.Duration,
 	state: Timer_State,
 	show_milliseconds: bool = false,
-	label_color: munin.Color = .BrightYellow,
-	time_color: munin.Color = .BrightGreen,
+	label_color: munin.Color = munin.Basic_Color.BrightYellow,
+	time_color: munin.Color = munin.Basic_Color.BrightGreen,
 ) {
 	// Calculate time components
 	total_ms := i64(time.duration_milliseconds(remaining))
@@ -45,9 +45,9 @@ draw_timer :: proc(
 	// Choose color based on remaining time
 	display_color := time_color
 	if remaining <= 0 {
-		display_color = .BrightRed
+		display_color = munin.Basic_Color.BrightRed
 	} else if total_seconds < 10 {
-		display_color = .BrightYellow
+		display_color = munin.Basic_Color.BrightYellow
 	}
 
 	// Draw time
@@ -57,20 +57,20 @@ draw_timer :: proc(
 
 	// Draw state indicator
 	state_text := ""
-	state_color := munin.Color.White
+	state_color := munin.Color(munin.Basic_Color.White)
 	switch state {
 	case .Ready:
 		state_text = "⏸ Ready"
-		state_color = .BrightBlue
+		state_color = munin.Basic_Color.BrightBlue
 	case .Running:
 		state_text = "▶ Running"
-		state_color = .BrightGreen
+		state_color = munin.Basic_Color.BrightGreen
 	case .Paused:
 		state_text = "⏸ Paused"
-		state_color = .BrightYellow
+		state_color = munin.Basic_Color.BrightYellow
 	case .Finished:
 		state_text = "✓ Finished"
-		state_color = .BrightRed
+		state_color = munin.Basic_Color.BrightRed
 	}
 
 	munin.print_at(buf, {pos.x + len(time_str) + 2, pos.y}, state_text, state_color)
@@ -86,7 +86,15 @@ draw_timer_with_progress :: proc(
 	width: int = 40,
 ) {
 	// Draw timer time
-	draw_timer(buf, pos, remaining, state, false, .BrightYellow, .BrightGreen)
+	draw_timer(
+		buf,
+		pos,
+		remaining,
+		state,
+		false,
+		munin.Basic_Color.BrightYellow,
+		munin.Basic_Color.BrightGreen,
+	)
 
 	// Calculate progress percentage
 	progress := 0
@@ -97,7 +105,16 @@ draw_timer_with_progress :: proc(
 	}
 
 	// Draw progress bar below timer
-	draw_progress_bar(buf, {pos.x, pos.y + 2}, width, progress, .Blocks, .BrightCyan, .White, true)
+	draw_progress_bar(
+		buf,
+		{pos.x, pos.y + 2},
+		width,
+		progress,
+		.Blocks,
+		munin.Basic_Color.BrightCyan,
+		munin.Basic_Color.White,
+		true,
+	)
 }
 
 // Draw timer with box and controls hint
@@ -113,7 +130,16 @@ draw_timer_boxed :: proc(
 	height := 8
 
 	// Draw box
-	draw_box_titled(buf, pos, width, height, title, .Single, .BrightCyan, .BrightWhite)
+	draw_box_titled(
+		buf,
+		pos,
+		width,
+		height,
+		title,
+		.Single,
+		munin.Basic_Color.BrightCyan,
+		munin.Basic_Color.BrightWhite,
+	)
 
 	// Draw timer
 	time_x := pos.x + width / 2 - 8
@@ -122,7 +148,7 @@ draw_timer_boxed :: proc(
 
 	// Draw controls
 	controls := "[Space] Start/Pause  [r] Reset"
-	munin.print_at(buf, {pos.x + 2, pos.y + height - 2}, controls, .BrightBlue)
+	munin.print_at(buf, {pos.x + 2, pos.y + height - 2}, controls, munin.Basic_Color.BrightBlue)
 }
 
 // Draw preset timer buttons
@@ -132,7 +158,7 @@ draw_timer_presets :: proc(
 	presets: []int, // Duration in seconds
 	selected: int = -1,
 ) {
-	munin.print_at(buf, pos, "Quick Timers:", .BrightCyan)
+	munin.print_at(buf, pos, "Quick Timers:", munin.Basic_Color.BrightCyan)
 
 	for duration, i in presets {
 		button_x := pos.x + (i * 12)
@@ -142,7 +168,7 @@ draw_timer_presets :: proc(
 
 		// Draw button background
 		if is_selected {
-			munin.set_bg_color(buf, .BrightBlue)
+			munin.set_bg_color(buf, munin.Basic_Color.BrightBlue)
 		}
 
 		// Format button text
@@ -155,7 +181,7 @@ draw_timer_presets :: proc(
 			button_text = fmt.tprintf(" %ds ", seconds)
 		}
 
-		color := is_selected ? munin.Color.White : munin.Color.BrightGreen
+		color := is_selected ? munin.Basic_Color.White : munin.Basic_Color.BrightGreen
 		munin.print_at(buf, {button_x, button_y}, button_text, color)
 		munin.reset_style(buf)
 	}

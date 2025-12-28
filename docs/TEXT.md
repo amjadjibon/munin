@@ -55,7 +55,7 @@ draw_heading :: proc(
     pos: munin.Vec2i,
     text: string,
     level: int = 1,
-    color: munin.Color = .BrightCyan,
+    color: munin.Color = munin.Basic_Color.BrightCyan,
 )
 ```
 
@@ -125,8 +125,8 @@ draw_banner :: proc(
     pos: munin.Vec2i,
     width: int,
     text: string,
-    bg_color: munin.Color = .BrightBlue,
-    text_color: munin.Color = .White,
+    bg_color: munin.Color = munin.Basic_Color.BrightBlue,
+    text_color: munin.Color = munin.Basic_Color.White,
 )
 ```
 
@@ -165,8 +165,8 @@ draw_label_value :: proc(
     buf: ^strings.Builder,
     pos: munin.Vec2i,
     label, value: string,
-    label_color: munin.Color = .BrightYellow,
-    value_color: munin.Color = .White,
+    label_color: munin.Color = munin.Basic_Color.BrightYellow,
+    value_color: munin.Color = munin.Basic_Color.White,
     separator: string = ": ",
 )
 ```

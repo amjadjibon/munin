@@ -29,8 +29,8 @@ draw_progress_bar :: proc(
     width: int,
     progress: int,              // 0-100
     style: Progress_Style = .Blocks,
-    filled_color: munin.Color = .BrightGreen,
-    empty_color: munin.Color = .White,
+    filled_color: munin.Color = munin.Basic_Color.BrightGreen,
+    empty_color: munin.Color = munin.Basic_Color.White,
     show_percent: bool = true,
 )
 ```
@@ -41,8 +41,8 @@ draw_progress_bar :: proc(
 - `width` - Total width of the bar in characters
 - `progress` - Progress value from 0 to 100
 - `style` - Visual style (default: `.Blocks`)
-- `filled_color` - Color for completed portion (default: `.BrightGreen`)
-- `empty_color` - Color for remaining portion (default: `.White`)
+- `filled_color` - Color for completed portion (default: `munin.Basic_Color.BrightGreen`)
+- `empty_color` - Color for remaining portion (default: `munin.Basic_Color.White`)
 - `show_percent` - Display percentage text after bar (default: `true`)
 
 **Features:**
@@ -67,8 +67,8 @@ draw_progress_bar_vertical :: proc(
     buf: ^strings.Builder,
     x, y, height: int,
     progress: int,              // 0-100
-    filled_color: munin.Color = .BrightGreen,
-    empty_color: munin.Color = .White,
+    filled_color: munin.Color = munin.Basic_Color.BrightGreen,
+    empty_color: munin.Color = munin.Basic_Color.White,
 )
 ```
 
@@ -103,8 +103,8 @@ draw_progress_bar_boxed :: proc(
     x, y, width: int,
     progress: int,
     label: string = "",
-    filled_color: munin.Color = .BrightGreen,
-    empty_color: munin.Color = .White,
+    filled_color: munin.Color = munin.Basic_Color.BrightGreen,
+    empty_color: munin.Color = munin.Basic_Color.White,
 )
 ```
 
