@@ -4,7 +4,7 @@ The Box component provides functions for drawing decorative boxes with various s
 
 ## Overview
 
-Located in `components/box.odin`, this component offers flexible box-drawing capabilities for creating visual containers in terminal applications.
+Located in `munin/components/box.odin`, this component offers flexible box-drawing capabilities for creating visual containers in terminal applications.
 
 ## Box Styles
 
@@ -124,7 +124,7 @@ draw_box_filled(buf, {10, 5}, 40, 10, .BrightBlue, .Rounded, .BrightCyan)
 
 ### Basic Box
 ```odin
-import "components"
+import "munin/components"
 import "core:strings"
 
 buf := strings.builder_make()

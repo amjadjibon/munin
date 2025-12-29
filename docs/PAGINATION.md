@@ -4,7 +4,7 @@ The Pagination component provides navigation controls for paginated content with
 
 ## Overview
 
-Located in `components/pagination.odin`, this component offers flexible pagination controls for displaying and navigating through large datasets in terminal applications.
+Located in `munin/components/pagination.odin`, this component offers flexible pagination controls for displaying and navigating through large datasets in terminal applications.
 
 ## Pagination Styles
 
@@ -160,7 +160,7 @@ page_users := get_page_slice(all_users, 3, 10)  // Returns users 21-30
 ### Basic Number Pagination
 
 ```odin
-import "components"
+import "munin/components"
 import "core:strings"
 
 buf := strings.builder_make()

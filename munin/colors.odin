@@ -83,29 +83,28 @@ color_from_string :: proc(s: string) -> Maybe(Color) {
 		}
 	}
 
-	// 3. Named Basic Colors (Simple fallback)
-	// Make case insensitive?
-	lower := strings.to_lower(s) // Allocates, TODO: Optimize or use generic cmp
-	defer delete(lower)
+	// 3. Named Basic Colors
+	// Case-insensitive comparison without allocation
 
-	switch lower {
-	case "black":
-		return Basic_Color.Black
-	case "red":
-		return Basic_Color.Red
-	case "green":
-		return Basic_Color.Green
-	case "yellow":
-		return Basic_Color.Yellow
-	case "blue":
-		return Basic_Color.Blue
-	case "magenta":
-		return Basic_Color.Magenta
-	case "cyan":
-		return Basic_Color.Cyan
-	case "white":
-		return Basic_Color.White
-	}
+	if strings.equal_fold(s, "black") {return Basic_Color.Black}
+	if strings.equal_fold(s, "red") {return Basic_Color.Red}
+	if strings.equal_fold(s, "green") {return Basic_Color.Green}
+	if strings.equal_fold(s, "yellow") {return Basic_Color.Yellow}
+	if strings.equal_fold(s, "blue") {return Basic_Color.Blue}
+	if strings.equal_fold(s, "magenta") {return Basic_Color.Magenta}
+	if strings.equal_fold(s, "cyan") {return Basic_Color.Cyan}
+	if strings.equal_fold(s, "white") {return Basic_Color.White}
+
+	// Bright variants
+	if strings.equal_fold(s, "brightblack") ||
+	   strings.equal_fold(s, "gray") {return Basic_Color.BrightBlack}
+	if strings.equal_fold(s, "brightred") {return Basic_Color.BrightRed}
+	if strings.equal_fold(s, "brightgreen") {return Basic_Color.BrightGreen}
+	if strings.equal_fold(s, "brightyellow") {return Basic_Color.BrightYellow}
+	if strings.equal_fold(s, "brightblue") {return Basic_Color.BrightBlue}
+	if strings.equal_fold(s, "brightmagenta") {return Basic_Color.BrightMagenta}
+	if strings.equal_fold(s, "brightcyan") {return Basic_Color.BrightCyan}
+	if strings.equal_fold(s, "brightwhite") {return Basic_Color.BrightWhite}
 
 	return nil
 }

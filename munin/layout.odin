@@ -199,12 +199,35 @@ get_visible_width :: proc(s: string) -> int {
 		if r == utf8.RUNE_ERROR {
 			i += 1
 		} else {
-			// TODO: Check for double-width characters (East Asian Width)
-			// For now, assume 1 rune = 1 column unless it's a zero-width char?
-			// Basic fix: Count RUNES, not BYTES.
-			width += 1
+			width += rune_width(r)
 			i += size
 		}
 	}
 	return width
+}
+
+// Simple heuristic for CJK/East character width
+rune_width :: proc(r: rune) -> int {
+	if r < 0x80 {
+		return 1
+	}
+
+	// CJK, Emoji, etc.
+	// Ranges are approximate but covers most common cases
+	if (r >= 0x1100 && r <= 0x115F) ||
+	   (r >= 0x2329 && r <= 0x232A) ||// Hangul Jamo
+	   (r >= 0x2E80 && r <= 0x303E) ||// Angle brackets
+	   (r >= 0x3040 && r <= 0xA4CF) ||// CJK Radicals, Punctuation
+	   (r >= 0xAC00 && r <= 0xD7A3) ||// CJK General (Hiragana, Katakana, Unified Ideographs, etc.)
+	   (r >= 0xF900 && r <= 0xFAFF) ||// Hangul Syllables
+	   (r >= 0xFE10 && r <= 0xFE19) ||// CJK Compatibility Ideographs
+	   (r >= 0xFE30 && r <= 0xFE6F) ||// Vertical Forms
+	   (r >= 0xFF00 && r <= 0xFF60) ||// CJK Compatibility Forms
+	   (r >= 0xFFE0 && r <= 0xFFE6) ||// Fullwidth Forms
+	   (r >= 0x1F300 && r <= 0x1F64F) ||// Fullwidth Symbols
+	   (r >= 0x1F900 && r <= 0x1F9FF) { 	// Miscellaneous Symbols and Pictographs// Supplemental Symbols and Pictographs (more emojis)
+		return 2
+	}
+
+	return 1
 }

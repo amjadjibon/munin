@@ -4,7 +4,7 @@ The Progress Bar component provides visual progress indicators with multiple sty
 
 ## Overview
 
-Located in `components/progress.odin`, this component offers flexible progress visualization with various fill styles, percentage display, and border options.
+Located in `munin/components/progress.odin`, this component offers flexible progress visualization with various fill styles, percentage display, and border options.
 
 ## Progress Styles
 
@@ -133,7 +133,7 @@ draw_progress_bar_boxed(&buf, 10, 10, 40, 80, "Download Progress", .BrightCyan, 
 ### Basic Progress Bar
 
 ```odin
-import "components"
+import "munin/components"
 import "core:strings"
 
 buf := strings.builder_make()

@@ -4,7 +4,7 @@ The Text component provides various text rendering utilities including word wrap
 
 ## Overview
 
-Located in `components/text.odin`, this component offers essential text formatting and layout functions for terminal applications.
+Located in `munin/components/text.odin`, this component offers essential text formatting and layout functions for terminal applications.
 
 ## Functions
 
@@ -201,7 +201,7 @@ Status: Active
 ### Wrapped Paragraph
 
 ```odin
-import "components"
+import "munin/components"
 import "core:strings"
 
 buf := strings.builder_make()
