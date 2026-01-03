@@ -1,7 +1,7 @@
 package main
 
-import comp "../../munin/components"
 import munin "../../munin"
+import comp "../../munin/components"
 import "core:fmt"
 import "core:mem"
 import "core:strings"
@@ -1153,6 +1153,8 @@ draw_settings_form :: proc(buf: ^strings.Builder, pos: munin.Vec2i, model: Model
 input_handler :: proc() -> Maybe(Msg) {
 	if event, ok := munin.read_key().?; ok {
 		#partial switch event.key {
+		case .Escape:
+			return Quit{}
 		case .Enter:
 			return SubmitForm{}
 		case .Tab:
@@ -1170,7 +1172,9 @@ input_handler :: proc() -> Maybe(Msg) {
 			// Use Down arrow for next field navigation
 			return NextField{}
 		case .Char:
-			if event.char == 3 {
+			if event.ctrl && event.char == 'c' {
+				return Quit{}
+			} else if event.char == 3 {
 				return Quit{}
 			} else if event.char == '1' {
 				return SwitchToForm{0}
