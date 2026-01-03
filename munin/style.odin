@@ -146,11 +146,12 @@ style_render :: proc(s: Style, text: string) -> string {
 	lines := strings.split(text, "\n")
 	defer delete(lines)
 
-	// Calculate content width (max line length)
+	// Calculate content width (max line length using visual width for proper Unicode/ANSI support)
 	content_width := 0
 	for line in lines {
-		if len(line) > content_width {
-			content_width = len(line)
+		visual_width := get_visible_width(line)
+		if visual_width > content_width {
+			content_width = visual_width
 		}
 	}
 
@@ -252,7 +253,7 @@ style_render :: proc(s: Style, text: string) -> string {
 		// A full robust implementation would restore previous state, but \x1b[0m is standard.
 
 		// Fill remaining width if any (for fixed width or alignment)
-		remaining := content_width - len(line)
+		remaining := content_width - get_visible_width(line)
 		for i in 0 ..< remaining {
 			strings.write_byte(&b, ' ')
 		}

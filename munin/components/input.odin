@@ -60,17 +60,48 @@ input_add_char :: proc(state: ^Input_State, char: rune) {
 }
 
 // Remove character before cursor (backspace)
+// Properly handles multi-byte UTF-8 characters
 input_backspace :: proc(state: ^Input_State) {
 	if state.cursor_pos > 0 && len(state.buffer) > 0 {
-		ordered_remove(&state.buffer, state.cursor_pos - 1)
-		state.cursor_pos -= 1
+		// Find the start of the previous UTF-8 character
+		// UTF-8 continuation bytes start with 10xxxxxx (0x80-0xBF)
+		char_start := state.cursor_pos - 1
+		for char_start > 0 && (state.buffer[char_start] & 0xC0) == 0x80 {
+			char_start -= 1
+		}
+
+		// Remove all bytes of this character
+		bytes_to_remove := state.cursor_pos - char_start
+		for _ in 0 ..< bytes_to_remove {
+			ordered_remove(&state.buffer, char_start)
+		}
+		state.cursor_pos = char_start
 	}
 }
 
 // Remove character at cursor (delete)
+// Properly handles multi-byte UTF-8 characters
 input_delete :: proc(state: ^Input_State) {
 	if state.cursor_pos < len(state.buffer) {
-		ordered_remove(&state.buffer, state.cursor_pos)
+		// Determine the length of the UTF-8 character at cursor
+		first_byte := state.buffer[state.cursor_pos]
+		char_len := 1
+		if (first_byte & 0x80) == 0 {
+			char_len = 1 // ASCII
+		} else if (first_byte & 0xE0) == 0xC0 {
+			char_len = 2 // 2-byte UTF-8
+		} else if (first_byte & 0xF0) == 0xE0 {
+			char_len = 3 // 3-byte UTF-8
+		} else if (first_byte & 0xF8) == 0xF0 {
+			char_len = 4 // 4-byte UTF-8
+		}
+
+		// Remove all bytes of this character
+		for _ in 0 ..< char_len {
+			if state.cursor_pos < len(state.buffer) {
+				ordered_remove(&state.buffer, state.cursor_pos)
+			}
+		}
 	}
 }
 

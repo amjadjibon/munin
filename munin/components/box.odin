@@ -125,11 +125,35 @@ draw_box_titled :: proc(
 	draw_box_styled(buf, pos, width, height, style, color)
 
 	// Draw title in the top border
-	if len(title) > 0 && width > 4 {
+	max_title_width := width - 4
+	if len(title) > 0 && max_title_width > 0 {
 		title_x := pos.x + 2
 		title_display := title
-		if len(title) > width - 4 {
-			title_display = title[:width - 4]
+
+		// Truncate title safely using visual width (handles UTF-8 properly)
+		title_visual_width := munin.get_visible_width(title)
+		if title_visual_width > max_title_width {
+			// Truncate by iterating runes to avoid cutting mid-character
+			current_width := 0
+			byte_pos := 0
+			for c in title {
+				char_width := munin.rune_width(c)
+				if current_width + char_width > max_title_width {
+					break
+				}
+				current_width += char_width
+				// Calculate byte position for this rune
+				if c <= 0x7F {
+					byte_pos += 1
+				} else if c <= 0x7FF {
+					byte_pos += 2
+				} else if c <= 0xFFFF {
+					byte_pos += 3
+				} else {
+					byte_pos += 4
+				}
+			}
+			title_display = title[:byte_pos]
 		}
 
 		munin.move_cursor(buf, {title_x, pos.y})

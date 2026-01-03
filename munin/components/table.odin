@@ -1,7 +1,6 @@
 package components
 
 import munin ".."
-import "core:slice"
 import "core:strings"
 
 // ============================================================
@@ -124,22 +123,38 @@ draw_table :: proc(
 }
 
 // Helper to pad string based on alignment
+// Uses temp_allocator to avoid memory leaks
 @(private)
 pad_string :: proc(s: string, width: int, align: Table_Align) -> string {
-	if len(s) >= width {
-		return s[:width]
+	visual_width := munin.get_visible_width(s)
+	if visual_width >= width {
+		// Truncate if too long - need to be careful with UTF-8
+		return s[:min(len(s), width)]
 	}
 
-	padding := width - len(s)
+	padding := width - visual_width
 	switch align {
 	case .Left:
-		return strings.concatenate({s, strings.repeat(" ", padding)})
+		return strings.concatenate(
+			{s, strings.repeat(" ", padding, context.temp_allocator)},
+			context.temp_allocator,
+		)
 	case .Right:
-		return strings.concatenate({strings.repeat(" ", padding), s})
+		return strings.concatenate(
+			{strings.repeat(" ", padding, context.temp_allocator), s},
+			context.temp_allocator,
+		)
 	case .Center:
 		left := padding / 2
 		right := padding - left
-		return strings.concatenate({strings.repeat(" ", left), s, strings.repeat(" ", right)})
+		return strings.concatenate(
+			{
+				strings.repeat(" ", left, context.temp_allocator),
+				s,
+				strings.repeat(" ", right, context.temp_allocator),
+			},
+			context.temp_allocator,
+		)
 	}
 	return s
 }

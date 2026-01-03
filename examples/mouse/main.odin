@@ -277,5 +277,5 @@ input_handler :: proc() -> Maybe(Msg) {
 main :: proc() {
 	program := munin.make_program(init, update, view)
 	defer delete(program.model.drag_path)
-	munin.run(&program, input_handler)
+	munin.run(&program, input_handler, enable_mouse = true)
 }

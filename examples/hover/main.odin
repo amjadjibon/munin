@@ -1,7 +1,7 @@
 package main
 
-import comp "../../munin/components"
 import munin "../../munin"
+import comp "../../munin/components"
 import "core:fmt"
 import "core:strings"
 
@@ -304,5 +304,5 @@ input_handler :: proc() -> Maybe(Msg) {
 main :: proc() {
 	program := munin.make_program(init, update, view)
 	defer delete(program.model.hover_trail)
-	munin.run(&program, input_handler)
+	munin.run(&program, input_handler, enable_mouse = true)
 }
