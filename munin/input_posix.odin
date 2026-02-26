@@ -2,6 +2,7 @@ package munin
 
 import "core:os"
 import "core:time"
+import "core:unicode/utf8"
 
 when ODIN_OS != .Windows {
 
@@ -118,7 +119,8 @@ when ODIN_OS != .Windows {
 		}
 
 		// Default char
-		return Key_Event{key = .Char, char = rune(buf[0]), shift = false}, 1, true
+		r, size := utf8.decode_rune(buf)
+		return Key_Event{key = .Char, char = r, shift = false}, size, true
 	}
 
 	// Parse SGR mouse event (format: ESC [ < Cb ; Cx ; Cy M/m)
