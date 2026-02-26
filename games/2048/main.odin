@@ -274,6 +274,9 @@ update :: proc(msg: Msg, model: Model) -> (Model, bool) {
 
 	if changed {
 		spawn_tile(&new_model.grid)
+		if new_model.state == .Won {
+			new_model.state = .Playing
+		}
 		check_status(&new_model)
 	}
 
