@@ -15,6 +15,26 @@ when ODIN_OS != .Windows {
 
 	// Helper: Parse a single event from a buffer
 	// Returns: event, consumed_bytes, success
+	utf8_sequence_size :: proc(first: byte) -> int {
+		if first < 0x80 {
+			return 1
+		}
+		if first >= 0xC2 && first <= 0xDF {
+			return 2
+		}
+		if first >= 0xE0 && first <= 0xEF {
+			return 3
+		}
+		if first >= 0xF0 && first <= 0xF4 {
+			return 4
+		}
+		return 0
+	}
+
+	is_utf8_continuation :: proc(b: byte) -> bool {
+		return (b & 0xC0) == 0x80
+	}
+
 	parse_event_from_buffer :: proc(buf: []byte) -> (Input_Event, int, bool) {
 		if len(buf) == 0 {
 			return nil, 0, false
@@ -119,7 +139,23 @@ when ODIN_OS != .Windows {
 		}
 
 		// Default char
-		r, size := utf8.decode_rune(buf)
+		size := utf8_sequence_size(buf[0])
+		if size == 0 {
+			return Key_Event{key = .Char, char = utf8.RUNE_ERROR}, 1, true
+		}
+		if len(buf) < size {
+			return nil, 0, false
+		}
+		for i in 1 ..< size {
+			if !is_utf8_continuation(buf[i]) {
+				return Key_Event{key = .Char, char = utf8.RUNE_ERROR}, 1, true
+			}
+		}
+
+		r, decoded_size := utf8.decode_rune(buf[:size])
+		if r == utf8.RUNE_ERROR || decoded_size != size {
+			return Key_Event{key = .Char, char = utf8.RUNE_ERROR}, 1, true
+		}
 		return Key_Event{key = .Char, char = r, shift = false}, size, true
 	}
 

@@ -401,6 +401,53 @@ test_parse_multiple_chars :: proc(t: ^testing.T) {
 }
 
 @(test)
+test_parse_utf8_char :: proc(t: ^testing.T) {
+	input := to_bytes("é")
+	event, consumed, ok := parse_event_from_buffer(input)
+
+	testing.expect(t, ok, "Should parse complete UTF-8 event")
+	testing.expect_value(t, consumed, 2)
+
+	if ok {
+		#partial switch e in event {
+		case Key_Event:
+			testing.expect_value(t, e.key, Key.Char)
+			testing.expect_value(t, e.char, 'é')
+		case:
+			testing.expect(t, false, "Expected Key_Event")
+		}
+	}
+}
+
+@(test)
+test_parse_incomplete_utf8_char :: proc(t: ^testing.T) {
+	input := []byte{0xC3}
+	event, consumed, ok := parse_event_from_buffer(input)
+
+	testing.expect(t, !ok, "Should wait for the rest of an incomplete UTF-8 sequence")
+	testing.expect_value(t, consumed, 0)
+}
+
+@(test)
+test_parse_utf8_emoji :: proc(t: ^testing.T) {
+	input := to_bytes("😀")
+	event, consumed, ok := parse_event_from_buffer(input)
+
+	testing.expect(t, ok, "Should parse complete emoji event")
+	testing.expect_value(t, consumed, 4)
+
+	if ok {
+		#partial switch e in event {
+		case Key_Event:
+			testing.expect_value(t, e.key, Key.Char)
+			testing.expect_value(t, e.char, '😀')
+		case:
+			testing.expect(t, false, "Expected Key_Event")
+		}
+	}
+}
+
+@(test)
 test_parse_escape_sequence_up :: proc(t: ^testing.T) {
 	input := to_bytes("\x1b[A")
 	event, consumed, ok := parse_event_from_buffer(input)

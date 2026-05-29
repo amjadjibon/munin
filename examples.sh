@@ -6,13 +6,41 @@ mkdir -p bin
 
 echo "Building examples..."
 
+build_example() {
+    local dir="$1"
+    local name="$2"
+    local out="bin/$name"
+    local attempts=3
+    local attempt=1
+
+    while [ "$attempt" -le "$attempts" ]; do
+        local tmp_out="${out}.$$.$attempt.tmp"
+
+        if odin build "$dir" -out:"$tmp_out"; then
+            mv "$tmp_out" "$out"
+            return 0
+        fi
+
+        local status=$?
+        rm -f "$tmp_out"
+
+        if [ "$attempt" -eq "$attempts" ]; then
+            return "$status"
+        fi
+
+        echo "Build failed for $name (attempt $attempt/$attempts), retrying..."
+        attempt=$((attempt + 1))
+        sleep 0.2
+    done
+}
+
 # Iterate over matching directories in examples/
 for dir in examples/*; do
     if [ -d "$dir" ] && [ -f "$dir/main.odin" ]; then
         name=$(basename "$dir")
         echo "Building $name..."
         # Build the example and output to bin/
-        odin build "$dir" -out:bin/"$name"
+        build_example "$dir" "$name"
     fi
 done
 

@@ -248,7 +248,7 @@ read_key :: proc() -> Maybe(Key_Event)
 ### Types
 
 #### `Vec2i`
-2D integer vector for positions:
+2D integer vector for 0-based positions. `{0, 0}` is the top-left terminal cell.
 ```odin
 Vec2i :: [2]int
 

@@ -19,7 +19,7 @@ test_move_cursor :: proc(t: ^testing.T) {
 
 	testing.expect(
 		t,
-		strings.contains(output, "\x1b[5;10H"),
+		strings.contains(output, "\x1b[6;11H"),
 		"Should contain cursor move sequence",
 	)
 }
@@ -33,7 +33,7 @@ test_move_cursor_origin :: proc(t: ^testing.T) {
 	move_cursor(&buf, {0, 0})
 	output := strings.to_string(buf)
 
-	testing.expect(t, strings.contains(output, "\x1b[0;0H"), "Should move to origin")
+	testing.expect(t, strings.contains(output, "\x1b[1;1H"), "Should move to origin")
 }
 
 @(test)
@@ -156,7 +156,7 @@ test_print_at :: proc(t: ^testing.T) {
 	output := strings.to_string(buf)
 
 	// Should contain cursor movement
-	testing.expect(t, strings.contains(output, "\x1b[10;5H"), "Should move cursor")
+	testing.expect(t, strings.contains(output, "\x1b[11;6H"), "Should move cursor")
 	// Should contain text
 	testing.expect(t, strings.contains(output, "Hello"), "Should contain text")
 	// Should contain color
@@ -202,7 +202,7 @@ test_draw_title_ascii :: proc(t: ^testing.T) {
 
 	// Title is 5 chars, width is 20, so padding = (20-5)/2 = 7.5 = 7
 	// Cursor should be at x=7
-	testing.expect(t, strings.contains(output, "\x1b[0;7H"), "Should center ASCII text correctly")
+	testing.expect(t, strings.contains(output, "\x1b[1;8H"), "Should center ASCII text correctly")
 	testing.expect(t, strings.contains(output, "Hello"), "Should contain title text")
 }
 
@@ -220,7 +220,7 @@ test_draw_title_utf8 :: proc(t: ^testing.T) {
 	// Cursor should be at x=8
 	testing.expect(
 		t,
-		strings.contains(output, "\x1b[0;8H"),
+		strings.contains(output, "\x1b[1;9H"),
 		"Should center UTF-8 text by rune count",
 	)
 	testing.expect(t, strings.contains(output, "你好世"), "Should contain UTF-8 text")
@@ -236,7 +236,7 @@ test_draw_title_emoji :: proc(t: ^testing.T) {
 	output := strings.to_string(buf)
 
 	// Title is 4 runes, width is 20, padding = (20-4)/2 = 8
-	testing.expect(t, strings.contains(output, "\x1b[0;8H"), "Should center emoji by rune count")
+	testing.expect(t, strings.contains(output, "\x1b[1;9H"), "Should center emoji by rune count")
 }
 
 @(test)
@@ -250,7 +250,7 @@ test_draw_title_mixed :: proc(t: ^testing.T) {
 	output := strings.to_string(buf)
 
 	// Padding = (30-10)/2 = 10
-	testing.expect(t, strings.contains(output, "\x1b[0;10H"), "Should center mixed text correctly")
+	testing.expect(t, strings.contains(output, "\x1b[1;11H"), "Should center mixed text correctly")
 }
 
 @(test)
@@ -276,7 +276,7 @@ test_draw_title_overflow :: proc(t: ^testing.T) {
 	output := strings.to_string(buf)
 
 	// Padding should be 0 (clamped), cursor at x=0
-	testing.expect(t, strings.contains(output, "\x1b[0;0H"), "Should clamp negative padding to 0")
+	testing.expect(t, strings.contains(output, "\x1b[1;1H"), "Should clamp negative padding to 0")
 	testing.expect(
 		t,
 		strings.contains(output, "Very Long Title"),

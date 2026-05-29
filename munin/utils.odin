@@ -25,7 +25,7 @@ clear_screen :: proc(buf: ^strings.Builder) {
 move_cursor :: proc(buf: ^strings.Builder, pos: Vec2i) {
 	assert(buf != nil, "Buffer cannot be nil")
 	assert(pos.x >= 0 && pos.y >= 0, "Position coordinates must be non-negative")
-	fmt.sbprintf(buf, "\x1b[%d;%dH", pos.y, pos.x)
+	fmt.sbprintf(buf, "\x1b[%d;%dH", pos.y + 1, pos.x + 1)
 }
 
 hide_cursor :: proc(buf: ^strings.Builder) {

@@ -44,13 +44,14 @@ destroy_input_state :: proc(state: ^Input_State) {
 
 // Add character to input
 input_add_char :: proc(state: ^Input_State, char: rune) {
-	if len(state.buffer) >= state.max_length {
-		return
-	}
-
 	// Convert rune to UTF-8
 	buf: [4]u8
 	n := utf8_encode_rune(buf[:], char)
+	if len(state.buffer) + n > state.max_length {
+		return
+	}
+
+	state.cursor_pos = utf8_boundary_at_or_before(state.buffer[:], state.cursor_pos)
 
 	// Insert at cursor position
 	for i in 0 ..< n {
@@ -63,16 +64,12 @@ input_add_char :: proc(state: ^Input_State, char: rune) {
 // Properly handles multi-byte UTF-8 characters
 input_backspace :: proc(state: ^Input_State) {
 	if state.cursor_pos > 0 && len(state.buffer) > 0 {
-		// Find the start of the previous UTF-8 character
-		// UTF-8 continuation bytes start with 10xxxxxx (0x80-0xBF)
-		char_start := state.cursor_pos - 1
-		for char_start > 0 && (state.buffer[char_start] & 0xC0) == 0x80 {
-			char_start -= 1
-		}
+		state.cursor_pos = clamp(state.cursor_pos, 0, len(state.buffer))
+		char_start := utf8_prev_boundary(state.buffer[:], state.cursor_pos)
+		char_len := utf8_char_len_at(state.buffer[:], char_start)
 
 		// Remove all bytes of this character
-		bytes_to_remove := state.cursor_pos - char_start
-		for _ in 0 ..< bytes_to_remove {
+		for _ in 0 ..< char_len {
 			ordered_remove(&state.buffer, char_start)
 		}
 		state.cursor_pos = char_start
@@ -83,18 +80,11 @@ input_backspace :: proc(state: ^Input_State) {
 // Properly handles multi-byte UTF-8 characters
 input_delete :: proc(state: ^Input_State) {
 	if state.cursor_pos < len(state.buffer) {
+		state.cursor_pos = clamp(state.cursor_pos, 0, len(state.buffer))
+		state.cursor_pos = utf8_boundary_at_or_before(state.buffer[:], state.cursor_pos)
+
 		// Determine the length of the UTF-8 character at cursor
-		first_byte := state.buffer[state.cursor_pos]
-		char_len := 1
-		if (first_byte & 0x80) == 0 {
-			char_len = 1 // ASCII
-		} else if (first_byte & 0xE0) == 0xC0 {
-			char_len = 2 // 2-byte UTF-8
-		} else if (first_byte & 0xF0) == 0xE0 {
-			char_len = 3 // 3-byte UTF-8
-		} else if (first_byte & 0xF8) == 0xF0 {
-			char_len = 4 // 4-byte UTF-8
-		}
+		char_len := utf8_char_len_at(state.buffer[:], state.cursor_pos)
 
 		// Remove all bytes of this character
 		for _ in 0 ..< char_len {
@@ -107,12 +97,12 @@ input_delete :: proc(state: ^Input_State) {
 
 // Move cursor left
 input_cursor_left :: proc(state: ^Input_State) {
-	state.cursor_pos = max(0, state.cursor_pos - 1)
+	state.cursor_pos = utf8_prev_boundary(state.buffer[:], state.cursor_pos)
 }
 
 // Move cursor right
 input_cursor_right :: proc(state: ^Input_State) {
-	state.cursor_pos = min(len(state.buffer), state.cursor_pos + 1)
+	state.cursor_pos = utf8_next_boundary(state.buffer[:], state.cursor_pos)
 }
 
 // Move cursor to start
@@ -186,6 +176,88 @@ input_get_text :: proc(state: ^Input_State) -> string {
 input_clear :: proc(state: ^Input_State) {
 	clear(&state.buffer)
 	state.cursor_pos = 0
+}
+
+@(private)
+utf8_is_continuation :: proc(b: u8) -> bool {
+	return (b & 0xC0) == 0x80
+}
+
+@(private)
+utf8_len_from_first_byte :: proc(first: u8) -> int {
+	if first < 0x80 {
+		return 1
+	}
+	if first >= 0xC2 && first <= 0xDF {
+		return 2
+	}
+	if first >= 0xE0 && first <= 0xEF {
+		return 3
+	}
+	if first >= 0xF0 && first <= 0xF4 {
+		return 4
+	}
+	return 1
+}
+
+@(private)
+utf8_char_len_at :: proc(buffer: []u8, pos: int) -> int {
+	if pos < 0 || pos >= len(buffer) {
+		return 0
+	}
+	char_len := utf8_len_from_first_byte(buffer[pos])
+	if pos + char_len > len(buffer) {
+		return 1
+	}
+	for i in 1 ..< char_len {
+		if !utf8_is_continuation(buffer[pos + i]) {
+			return 1
+		}
+	}
+	return char_len
+}
+
+@(private)
+utf8_prev_boundary :: proc(buffer: []u8, pos: int) -> int {
+	p := clamp(pos, 0, len(buffer))
+	if p <= 0 {
+		return 0
+	}
+	p -= 1
+	for p > 0 && utf8_is_continuation(buffer[p]) {
+		p -= 1
+	}
+	return p
+}
+
+@(private)
+utf8_boundary_at_or_before :: proc(buffer: []u8, pos: int) -> int {
+	p := clamp(pos, 0, len(buffer))
+	if p >= len(buffer) {
+		return len(buffer)
+	}
+	for p > 0 && utf8_is_continuation(buffer[p]) {
+		p -= 1
+	}
+	return p
+}
+
+@(private)
+utf8_next_boundary :: proc(buffer: []u8, pos: int) -> int {
+	if len(buffer) == 0 {
+		return 0
+	}
+
+	p := clamp(pos, 0, len(buffer))
+	if p >= len(buffer) {
+		return len(buffer)
+	}
+	for p > 0 && utf8_is_continuation(buffer[p]) {
+		p -= 1
+	}
+
+	char_len := utf8_char_len_at(buffer, p)
+	return min(p + char_len, len(buffer))
 }
 
 // Helper to encode rune to UTF-8

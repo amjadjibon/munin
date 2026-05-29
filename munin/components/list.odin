@@ -90,18 +90,22 @@ draw_list_scrollable :: proc(
 	scroll_offset: int,
 	style: List_Style = .Bullet,
 ) {
+	if visible_height <= 0 || len(items) == 0 {
+		return
+	}
+
 	// Calculate visible range
-	start := scroll_offset
-	end := min(scroll_offset + visible_height, len(items))
+	start := clamp(scroll_offset, 0, len(items))
+	end := min(start + visible_height, len(items))
 
 	// Draw visible items
 	visible_items := items[start:end]
-	adjusted_selected := selected - scroll_offset
+	adjusted_selected := selected - start
 
 	draw_list(buf, pos, visible_items, adjusted_selected, style)
 
 	// Draw scroll indicators
-	if scroll_offset > 0 {
+	if start > 0 && pos.y > 0 {
 		munin.print_at(buf, {pos.x + 20, pos.y - 1}, "▲ More above", .BrightBlue)
 	}
 	if end < len(items) {
