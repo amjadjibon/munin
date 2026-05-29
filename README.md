@@ -535,6 +535,7 @@ The `examples/` directory contains numerous examples demonstrating various featu
 - **hover**: Hover effects and tracking
 - **lists**: Various list styles and scrolling
 - **tables**: Data table rendering
+- **sqlite_browser**: Interactive SQLite table/schema/query browser
 - **forms**: Input forms with validation
 - **spinners**: Loading animations
 - **progress**: Progress bar implementations

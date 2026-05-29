@@ -127,9 +127,11 @@ draw_table :: proc(
 @(private)
 pad_string :: proc(s: string, width: int, align: Table_Align) -> string {
 	visual_width := munin.get_visible_width(s)
-	if visual_width >= width {
-		// Truncate if too long - need to be careful with UTF-8
-		return s[:min(len(s), width)]
+	if visual_width == width {
+		return s
+	}
+	if visual_width > width {
+		return truncate_visible_width(s, width)
 	}
 
 	padding := width - visual_width
@@ -157,4 +159,33 @@ pad_string :: proc(s: string, width: int, align: Table_Align) -> string {
 		)
 	}
 	return s
+}
+
+@(private)
+truncate_visible_width :: proc(s: string, width: int) -> string {
+	if width <= 0 {
+		return ""
+	}
+
+	current_width := 0
+	byte_pos := 0
+	for r in s {
+		rune_width := munin.rune_width(r)
+		if current_width + rune_width > width {
+			break
+		}
+
+		current_width += rune_width
+		if r <= 0x7F {
+			byte_pos += 1
+		} else if r <= 0x7FF {
+			byte_pos += 2
+		} else if r <= 0xFFFF {
+			byte_pos += 3
+		} else {
+			byte_pos += 4
+		}
+	}
+
+	return s[:byte_pos]
 }
