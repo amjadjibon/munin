@@ -1,6 +1,7 @@
 package munin
 
 import "core:testing"
+import "core:time"
 
 // The input parser under test is the POSIX one; the Windows port reads
 // console records instead and shares none of this code.
@@ -630,4 +631,167 @@ test_parse_ctrl_c :: proc(t: ^testing.T) {
 		}
 	}
 }
+
+// ============================================================
+// INPUT BUFFER (chunked reads, timeouts, overflow)
+// ============================================================
+
+@(private = "file")
+feed_str :: proc(b: ^Input_Buffer, s: string, at: time.Time) -> int {
+	return input_buffer_feed(b, transmute([]byte)s, at)
 }
+
+@(test)
+test_input_buffer_parses_events_in_order :: proc(t: ^testing.T) {
+	b: Input_Buffer
+	now := time.now()
+	feed_str(&b, "ab", now)
+
+	first, ok1 := input_buffer_next(&b, now).?
+	second, ok2 := input_buffer_next(&b, now).?
+	_, ok3 := input_buffer_next(&b, now).?
+
+	testing.expect(t, ok1 && ok2, "two characters, two events")
+	testing.expect(t, !ok3, "and then nothing")
+	testing.expect_value(t, first.(Key_Event).char, 'a')
+	testing.expect_value(t, second.(Key_Event).char, 'b')
+}
+
+@(test)
+test_input_buffer_waits_for_a_split_escape_sequence :: proc(t: ^testing.T) {
+	// A sequence arriving in two reads must not be misparsed as Escape plus
+	// literal characters.
+	b: Input_Buffer
+	now := time.now()
+
+	feed_str(&b, "\x1b[", now)
+	_, early := input_buffer_next(&b, now).?
+	testing.expect(t, !early, "incomplete sequence should wait")
+
+	feed_str(&b, "A", now)
+	event, ok := input_buffer_next(&b, now).?
+	testing.expect(t, ok, "completed sequence should parse")
+	testing.expect_value(t, event.(Key_Event).key, Key.Up)
+}
+
+@(test)
+test_input_buffer_split_utf8_character :: proc(t: ^testing.T) {
+	b: Input_Buffer
+	now := time.now()
+
+	feed_str(&b, "\xc3", now) // first byte of "é"
+	_, early := input_buffer_next(&b, now).?
+	testing.expect(t, !early, "incomplete character should wait")
+
+	feed_str(&b, "\xa9", now)
+	event, ok := input_buffer_next(&b, now).?
+	testing.expect(t, ok, "completed character should parse")
+	testing.expect_value(t, event.(Key_Event).char, 'é')
+}
+
+@(test)
+test_input_buffer_bare_escape_resolves_on_timeout :: proc(t: ^testing.T) {
+	b: Input_Buffer
+	now := time.now()
+	feed_str(&b, "\x1b", now)
+
+	_, early := input_buffer_next(&b, now).?
+	testing.expect(t, !early, "a lone ESC is ambiguous at first")
+
+	later := time.time_add(now, ESCAPE_TIMEOUT + time.Millisecond)
+	event, ok := input_buffer_next(&b, later).?
+	testing.expect(t, ok, "after the timeout it is the Escape key")
+	testing.expect_value(t, event.(Key_Event).key, Key.Escape)
+	testing.expect_value(t, b.len, 0)
+}
+
+@(test)
+test_input_buffer_recovers_immediately_when_full :: proc(t: ^testing.T) {
+	// A full buffer holding an unterminated sequence cannot be resolved by
+	// waiting - nothing more can be read into it.
+	b: Input_Buffer
+	now := time.now()
+
+	junk := make([]byte, len(b.data), context.temp_allocator)
+	junk[0] = 0x1b
+	junk[1] = '['
+	for i in 2 ..< len(junk) {
+		junk[i] = '9' // parameter bytes: the sequence never terminates
+	}
+	accepted := input_buffer_feed(&b, junk, now)
+	testing.expect_value(t, accepted, len(b.data))
+
+	// No waiting: it must make progress on this very call.
+	_, ok := input_buffer_next(&b, now).?
+	testing.expect(t, ok, "a full buffer must resolve without waiting")
+	testing.expect(t, b.len < len(b.data), "and must consume something")
+	free_all(context.temp_allocator)
+}
+
+@(test)
+test_input_buffer_feed_drops_what_does_not_fit :: proc(t: ^testing.T) {
+	b: Input_Buffer
+	now := time.now()
+
+	first := make([]byte, len(b.data), context.temp_allocator)
+	for i in 0 ..< len(first) {
+		first[i] = 'x'
+	}
+	testing.expect_value(t, input_buffer_feed(&b, first, now), len(b.data))
+	testing.expect_value(t, input_buffer_feed(&b, first, now), 0) // no room left
+	free_all(context.temp_allocator)
+}
+
+@(test)
+test_input_buffer_drains_a_paste_in_one_pass :: proc(t: ^testing.T) {
+	// The run loop drains in a loop; a pasted line must come out as events
+	// without any waiting in between.
+	b: Input_Buffer
+	now := time.now()
+	text := "the quick brown fox"
+	feed_str(&b, text, now)
+
+	count := 0
+	for {
+		event, ok := input_buffer_next(&b, now).?
+		if !ok {
+			break
+		}
+		if key, is_key := event.(Key_Event); is_key && key.key == .Char {
+			count += 1
+		}
+	}
+
+	testing.expect_value(t, count, len(text))
+	testing.expect_value(t, b.len, 0)
+}
+
+@(test)
+test_input_buffer_mixed_stream :: proc(t: ^testing.T) {
+	// Text, a mouse report and an arrow key in one read.
+	b: Input_Buffer
+	now := time.now()
+	feed_str(&b, "a\x1b[<0;10;20M\x1b[B", now)
+
+	kinds := make([dynamic]string, context.temp_allocator)
+	for {
+		event, ok := input_buffer_next(&b, now).?
+		if !ok {
+			break
+		}
+		switch e in event {
+		case Key_Event:
+			append(&kinds, e.key == .Char ? "char" : "key")
+		case Mouse_Event:
+			append(&kinds, "mouse")
+		}
+	}
+
+	testing.expect_value(t, len(kinds), 3)
+	testing.expect_value(t, kinds[0], "char")
+	testing.expect_value(t, kinds[1], "mouse")
+	testing.expect_value(t, kinds[2], "key")
+	free_all(context.temp_allocator)
+}
+}
+

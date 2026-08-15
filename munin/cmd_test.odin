@@ -57,8 +57,10 @@ test_cmd_after_fires_once_when_due :: proc(t: ^testing.T) {
 	early := drain_due(&cmds, now)
 	testing.expect_value(t, len(early), 0)
 
-	// Due.
-	fired := drain_due(&cmds, time.time_add(now, 60 * time.Millisecond))
+	// Due. Times are taken from the timer itself rather than from a clock
+	// read before it was scheduled, which is a race.
+	due := cmds.timers[0].due
+	fired := drain_due(&cmds, time.time_add(due, time.Millisecond))
 	testing.expect_value(t, len(fired), 1)
 	testing.expect_value(t, fired[0], Test_Msg.Done)
 
@@ -74,11 +76,12 @@ test_cmd_every_reschedules :: proc(t: ^testing.T) {
 	cmds: Cmd_Context(Test_Msg)
 	defer cmd_destroy(&cmds)
 
-	now := time.now()
 	cmd_every(&cmds, 100 * time.Millisecond, Test_Msg.Blink)
 
 	for i in 1 ..= 3 {
-		at := time.time_add(now, time.Duration(i) * 100 * time.Millisecond)
+		// Fire relative to when this timer is actually due, so the test does
+		// not depend on how long scheduling took.
+		at := time.time_add(cmds.timers[0].due, time.Millisecond)
 		fired := drain_due(&cmds, at)
 		testing.expectf(t, len(fired) == 1, "tick %d should fire once, fired %d", i, len(fired))
 		if len(fired) > 0 {
@@ -95,11 +98,10 @@ test_cmd_cancel_stops_a_repeating_message :: proc(t: ^testing.T) {
 	cmds: Cmd_Context(Test_Msg)
 	defer cmd_destroy(&cmds)
 
-	now := time.now()
 	handle := cmd_every(&cmds, 10 * time.Millisecond, Test_Msg.Blink)
 	cmd_cancel(&cmds, handle)
 
-	fired := drain_due(&cmds, time.time_add(now, time.Second))
+	fired := drain_due(&cmds, time.time_add(time.now(), time.Second))
 	testing.expect_value(t, len(fired), 0)
 	testing.expect_value(t, len(cmds.timers), 0)
 	free_all(context.temp_allocator)
@@ -110,13 +112,12 @@ test_cmd_cancel_leaves_other_timers_alone :: proc(t: ^testing.T) {
 	cmds: Cmd_Context(Test_Msg)
 	defer cmd_destroy(&cmds)
 
-	now := time.now()
 	keep := cmd_every(&cmds, 10 * time.Millisecond, Test_Msg.Tick)
 	drop := cmd_every(&cmds, 10 * time.Millisecond, Test_Msg.Blink)
 	cmd_cancel(&cmds, drop)
 	_ = keep
 
-	fired := drain_due(&cmds, time.time_add(now, 20 * time.Millisecond))
+	fired := drain_due(&cmds, time.time_add(time.now(), time.Second))
 	testing.expect_value(t, len(fired), 1)
 	testing.expect_value(t, fired[0], Test_Msg.Tick)
 	free_all(context.temp_allocator)
@@ -127,12 +128,12 @@ test_cmd_multiple_timers_fire_together :: proc(t: ^testing.T) {
 	cmds: Cmd_Context(Test_Msg)
 	defer cmd_destroy(&cmds)
 
-	now := time.now()
 	cmd_after(&cmds, 10 * time.Millisecond, Test_Msg.Tick)
 	cmd_after(&cmds, 20 * time.Millisecond, Test_Msg.Blink)
 	cmd_after(&cmds, time.Hour, Test_Msg.Done)
 
-	fired := drain_due(&cmds, time.time_add(now, 30 * time.Millisecond))
+	// Past the second timer, nowhere near the third.
+	fired := drain_due(&cmds, time.time_add(cmds.timers[1].due, time.Millisecond))
 	testing.expect_value(t, len(fired), 2)
 	testing.expect_value(t, len(cmds.timers), 1) // the far-future one survives
 	free_all(context.temp_allocator)
@@ -166,10 +167,9 @@ test_cmd_next_due_is_zero_when_overdue :: proc(t: ^testing.T) {
 	cmds: Cmd_Context(Test_Msg)
 	defer cmd_destroy(&cmds)
 
-	now := time.now()
 	cmd_after(&cmds, 10 * time.Millisecond, Test_Msg.Tick)
 
-	due := cmd_next_due(&cmds, time.time_add(now, time.Second))
+	due := cmd_next_due(&cmds, time.time_add(time.now(), time.Second))
 	testing.expect_value(t, due, time.Duration(0))
 }
 

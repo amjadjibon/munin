@@ -6,15 +6,24 @@ import "core:unicode/utf8"
 
 when ODIN_OS != .Windows {
 
-	// NOTE: The input buffer below is package-level global state, so input
-	// handling is single-threaded: read_input/read_key must only be called
-	// from the thread running the program loop.
+	// Bytes read from the terminal that have not yet been parsed into events.
+	//
+	// Terminal input arrives in arbitrary chunks: an escape sequence can be
+	// split across two reads, and a paste delivers hundreds of bytes at once.
+	// Keeping the partial state in a named type (rather than three loose
+	// globals) makes the whole pipeline testable without a terminal, and
+	// leaves room for input to become per-program later.
+	Input_Buffer :: struct {
+		data:      [1024]byte,
+		len:       int,
+		last_read: time.Time,
+	}
+
+	// The buffer read_input()/read_key() use. Input handling is
+	// single-threaded: these must only be called from the thread running the
+	// program loop.
 	@(private)
-	input_buffer: [1024]byte
-	@(private)
-	input_buffer_len: int
-	@(private)
-	last_input_time: time.Time
+	stdin_input: Input_Buffer
 
 	// Longest escape sequence we are willing to buffer before deciding the
 	// stream is garbage and resynchronising.
@@ -385,50 +394,52 @@ when ODIN_OS != .Windows {
 		}
 	}
 
-	read_input :: proc() -> Maybe(Input_Event) {
-		// Unix/Linux/macOS
-
-		// 1. Read available input into buffer
-		// Only read if we have space
-		if input_buffer_len < len(input_buffer) {
-			// Read into available space
-			available_buf := input_buffer[input_buffer_len:]
-			n, err := os.read(os.stdin, available_buf) // Non-blocking because VMIN=0/VTIME=0
-			if err == nil && n > 0 {
-				input_buffer_len += n
-				last_input_time = time.now()
-			}
+	// Append bytes to the buffer, dropping whatever does not fit.
+	// Returns the number of bytes accepted.
+	input_buffer_feed :: proc(b: ^Input_Buffer, bytes: []byte, now: Maybe(time.Time) = nil) -> int {
+		space := len(b.data) - b.len
+		if space <= 0 || len(bytes) == 0 {
+			return 0
 		}
 
-		if input_buffer_len == 0 {
+		n := min(space, len(bytes))
+		copy(b.data[b.len:], bytes[:n])
+		b.len += n
+		b.last_read = now.? or_else time.now()
+		return n
+	}
+
+	// Parse the next event out of the buffer.
+	//
+	// Returns nil while the buffer holds only an incomplete sequence, unless
+	// waiting can no longer help: the buffer is full (nothing more can be
+	// read) or the sequence has been sitting there long enough that a bare
+	// Escape is the better explanation.
+	input_buffer_next :: proc(b: ^Input_Buffer, now: Maybe(time.Time) = nil) -> Maybe(Input_Event) {
+		if b.len == 0 {
 			return nil
 		}
 
-		// 2. Parse event
-		event, consumed, ok := parse_event_from_buffer(input_buffer[:input_buffer_len])
+		event, consumed, ok := parse_event_from_buffer(b.data[:b.len])
 
 		if ok && consumed > 0 {
-			// Shift remaining buffer
-			copy(input_buffer[:], input_buffer[consumed:input_buffer_len])
-			input_buffer_len -= consumed
+			copy(b.data[:], b.data[consumed:b.len])
+			b.len -= consumed
 			return event
 		}
 
-		// Incomplete sequence. Drop the leading byte if either the buffer is
-		// full (waiting can no longer help - nothing more can be read) or we
-		// have waited long enough that a bare ESC is the best explanation.
-		buffer_full := input_buffer_len >= len(input_buffer)
-		timed_out := time.diff(last_input_time, time.now()) > 50 * time.Millisecond
+		buffer_full := b.len >= len(b.data)
+		timed_out := time.diff(b.last_read, now.? or_else time.now()) > ESCAPE_TIMEOUT
 
 		if buffer_full || timed_out {
-			b := input_buffer[0]
-			copy(input_buffer[:], input_buffer[1:input_buffer_len])
-			input_buffer_len -= 1
+			first := b.data[0]
+			copy(b.data[:], b.data[1:b.len])
+			b.len -= 1
 
-			if b == 0x1b {
+			if first == 0x1b {
 				return Key_Event{key = .Escape}
 			}
-			ev, _, parsed := parse_char_event([]byte{b})
+			ev, _, parsed := parse_char_event([]byte{first})
 			if parsed {
 				return ev
 			}
@@ -437,5 +448,24 @@ when ODIN_OS != .Windows {
 
 		// Keep the data in the buffer for next time
 		return nil
+	}
+
+	// How long an incomplete escape sequence is given before it is treated as
+	// a bare Escape key.
+	ESCAPE_TIMEOUT :: 50 * time.Millisecond
+
+	read_input :: proc() -> Maybe(Input_Event) {
+		// Unix/Linux/macOS
+		if stdin_input.len < len(stdin_input.data) {
+			// Non-blocking because VMIN=0/VTIME=0
+			scratch := stdin_input.data[stdin_input.len:]
+			n, err := os.read(os.stdin, scratch)
+			if err == nil && n > 0 {
+				stdin_input.len += n
+				stdin_input.last_read = time.now()
+			}
+		}
+
+		return input_buffer_next(&stdin_input)
 	}
 }
