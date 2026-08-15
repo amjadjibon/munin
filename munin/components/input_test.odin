@@ -1,5 +1,6 @@
 package components
 
+import "core:strings"
 import "core:testing"
 
 @(test)
@@ -74,4 +75,85 @@ test_input_add_char_respects_max_length_by_encoded_size :: proc(t: ^testing.T) {
 
 	testing.expect_value(t, input_get_text(&state), "好")
 	testing.expect_value(t, state.cursor_pos, 3)
+}
+
+// ============================================================
+// RENDERING SAFETY (REGRESSION)
+// ============================================================
+
+@(test)
+test_draw_input_password_no_leak :: proc(t: ^testing.T) {
+	// The mask string used to be allocated from context.allocator on every
+	// frame and never freed. The test runner's tracking allocator fails this
+	// test if that regresses.
+	state := make_input_state(32, "")
+	defer destroy_input_state(&state)
+	state.is_password = true
+	state.is_focused = true
+	input_add_char(&state, 'h')
+	input_add_char(&state, 'i')
+
+	buf := strings.builder_make()
+	defer strings.builder_destroy(&buf)
+
+	for _ in 0 ..< 10 {
+		draw_input(&buf, {0, 0}, &state, 20)
+	}
+
+	free_all(context.temp_allocator)
+	testing.expect(t, strings.builder_len(buf) > 0, "Should render something")
+}
+
+@(test)
+test_draw_input_masks_by_character_not_byte :: proc(t: ^testing.T) {
+	state := make_input_state(32, "")
+	defer destroy_input_state(&state)
+	state.is_password = true
+	input_add_char(&state, 'é') // 2 bytes, 1 character
+
+	buf := strings.builder_make()
+	defer strings.builder_destroy(&buf)
+	draw_input(&buf, {0, 0}, &state, 20, .Inline)
+	free_all(context.temp_allocator)
+
+	testing.expect_value(t, strings.count(strings.to_string(buf), "*"), 1)
+}
+
+@(test)
+test_draw_input_tiny_width_does_not_crash :: proc(t: ^testing.T) {
+	// draw_input passes width-2 to the content renderer, which used to slice
+	// with a negative bound.
+	state := make_input_state(32, "placeholder text")
+	defer destroy_input_state(&state)
+	state.is_focused = true
+
+	buf := strings.builder_make()
+	defer strings.builder_destroy(&buf)
+
+	for w in 0 ..< 4 {
+		draw_input(&buf, {0, 0}, &state, w)
+		input_add_char(&state, 'x')
+		draw_input(&buf, {0, 0}, &state, w)
+	}
+	free_all(context.temp_allocator)
+}
+
+@(test)
+test_draw_input_multibyte_cursor :: proc(t: ^testing.T) {
+	state := make_input_state(32, "")
+	defer destroy_input_state(&state)
+	state.is_focused = true
+	state.cursor_blink_state = false
+	input_add_char(&state, '你')
+	input_add_char(&state, '好')
+	input_cursor_home(&state)
+
+	buf := strings.builder_make()
+	defer strings.builder_destroy(&buf)
+	draw_input(&buf, {0, 0}, &state, 20, .Inline)
+	free_all(context.temp_allocator)
+
+	// With the cursor "off" the real characters are drawn whole, not sliced
+	// one byte at a time.
+	testing.expect(t, strings.contains(strings.to_string(buf), "你好"), "Should render intact text")
 }

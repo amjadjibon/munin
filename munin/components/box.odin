@@ -128,33 +128,12 @@ draw_box_titled :: proc(
 	max_title_width := width - 4
 	if len(title) > 0 && max_title_width > 0 {
 		title_x := pos.x + 2
-		title_display := title
 
-		// Truncate title safely using visual width (handles UTF-8 properly)
-		title_visual_width := munin.get_visible_width(title)
-		if title_visual_width > max_title_width {
-			// Truncate by iterating runes to avoid cutting mid-character
-			current_width := 0
-			byte_pos := 0
-			for c in title {
-				char_width := munin.rune_width(c)
-				if current_width + char_width > max_title_width {
-					break
-				}
-				current_width += char_width
-				// Calculate byte position for this rune
-				if c <= 0x7F {
-					byte_pos += 1
-				} else if c <= 0x7FF {
-					byte_pos += 2
-				} else if c <= 0xFFFF {
-					byte_pos += 3
-				} else {
-					byte_pos += 4
-				}
-			}
-			title_display = title[:byte_pos]
-		}
+		// Truncate title safely using visual width (handles UTF-8 properly).
+		// Shares the table's truncation helper: the open-coded version here
+		// re-encoded each decoded rune, which overshoots the end of the string
+		// on malformed UTF-8 and slices out of bounds.
+		title_display := truncate_visible_width(title, max_title_width)
 
 		munin.move_cursor(buf, {title_x, pos.y})
 		if !munin.is_color_reset(color) {

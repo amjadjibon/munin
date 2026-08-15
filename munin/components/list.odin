@@ -46,8 +46,14 @@ draw_list :: proc(
 
 		// Draw marker based on style
 		marker := ""
-		marker_color :=
-			!munin.is_color_reset(item.color) ? item.color : munin.Color(munin.Basic_Color.White)
+		// NOTE: written as an if rather than a ternary - a ternary whose
+		// branches are a union value and a constant conversion to that union
+		// makes the Odin backend emit a mistyped LLVM PHI node, which fails
+		// code generation for this whole procedure.
+		marker_color := munin.Color(munin.Basic_Color.White)
+		if !munin.is_color_reset(item.color) {
+			marker_color = item.color
+		}
 
 		switch style {
 		case .Bullet:
@@ -67,8 +73,10 @@ draw_list :: proc(
 
 		// Draw text with color and selection highlight
 		text_x := marker_x + len(marker) + 1
-		text_color :=
-			!munin.is_color_reset(item.color) ? item.color : munin.Color(munin.Basic_Color.White)
+		text_color := munin.Color(munin.Basic_Color.White)
+		if !munin.is_color_reset(item.color) {
+			text_color = item.color
+		}
 
 		if is_selected {
 			munin.set_bold(buf)

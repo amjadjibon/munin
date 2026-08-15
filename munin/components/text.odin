@@ -25,7 +25,9 @@ draw_text_wrapped :: proc(
 	munin.set_color(buf, color)
 
 	for word in words {
-		word_len := len(word)
+		// Cell width, not byte length - otherwise a multi-byte word wraps
+		// far too early.
+		word_len := munin.get_visible_width(word)
 
 		// Check if word fits on current line
 		if current_x + word_len > pos.x + max_width && current_x != line_start_x {
@@ -74,8 +76,11 @@ draw_text_centered :: proc(
 	text: string,
 	color: munin.Color = .White,
 ) {
-	x := (screen_width - len(text)) / 2
-	munin.print_at(buf, {x, y}, text, color)
+	// Measure in cells, not bytes, and never produce a negative column:
+	// print_at asserts on negative coordinates, so text wider than the screen
+	// used to abort the program.
+	x := (screen_width - munin.get_visible_width(text)) / 2
+	munin.print_at(buf, {max(x, 0), y}, text, color)
 }
 
 // Draw a banner with padding

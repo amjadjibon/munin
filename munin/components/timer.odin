@@ -27,8 +27,10 @@ draw_timer :: proc(
 	time_color: munin.Color = munin.Basic_Color.BrightGreen,
 ) {
 	// Calculate time components
-	total_ms := i64(time.duration_milliseconds(remaining))
-	total_seconds := max(total_ms / 1000, 0)
+	// Clamp first: an overrun timer would otherwise format negative
+	// components ("00:00:00.-500").
+	total_ms := max(i64(time.duration_milliseconds(remaining)), 0)
+	total_seconds := total_ms / 1000
 	milliseconds := total_ms % 1000
 	seconds := total_seconds % 60
 	minutes := (total_seconds / 60) % 60

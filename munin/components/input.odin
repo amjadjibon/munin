@@ -1,8 +1,8 @@
 package components
 
 import munin ".."
-import "core:fmt"
 import "core:strings"
+import "core:unicode/utf8"
 
 // ============================================================
 // TEXT INPUT COMPONENT
@@ -297,6 +297,12 @@ draw_input :: proc(
 	cursor_color: munin.Color = munin.Basic_Color.BrightGreen,
 	placeholder_color: munin.Color = munin.Basic_Color.BrightBlue,
 ) {
+	// Nothing sensible to draw, and the box style would place its right
+	// border at x-1 and trip move_cursor's non-negative assert.
+	if width <= 0 || (style == .Box && width < 2) {
+		return
+	}
+
 	current_x := pos.x
 	current_y := pos.y
 
@@ -414,15 +420,20 @@ draw_input_content :: proc(
 	cursor_color: munin.Color,
 	placeholder_color: munin.Color,
 ) {
+	// A caller passing a small width (draw_input subtracts 2 for the box
+	// borders) must not produce a negative slice bound below.
+	if width <= 0 {
+		return
+	}
+
 	munin.move_cursor(buf, pos)
 
 	// Show placeholder if empty
 	if len(state.buffer) == 0 {
 		munin.set_color(buf, placeholder_color)
-		placeholder_text := state.placeholder
-		if len(placeholder_text) > width {
-			placeholder_text = placeholder_text[:width]
-		}
+		// Truncate on character boundaries, not byte offsets: slicing at a
+		// raw byte index splits multi-byte characters and emits broken UTF-8.
+		placeholder_text := truncate_visible_width(state.placeholder, width)
 
 		// Show placeholder text
 		strings.write_string(buf, placeholder_text)
@@ -453,21 +464,29 @@ draw_input_content :: proc(
 	text := input_get_text(state)
 	display_text := text
 	if state.is_password {
-		// Mask password
-		masked := strings.repeat("*", len(text))
-		display_text = masked
+		// Mask password. One asterisk per character, not per byte, and
+		// allocated in the temp arena - this runs every frame, and the old
+		// context.allocator version was never freed.
+		rune_count := utf8.rune_count_in_string(text)
+		display_text = strings.repeat("*", rune_count, context.temp_allocator)
 	}
 
-	// Truncate if too long
-	if len(display_text) > width {
-		display_text = display_text[:width]
-	}
+	// Truncate if too long (on character boundaries)
+	display_text = truncate_visible_width(display_text, width)
 
 	munin.set_color(buf, text_color)
 
-	// Draw text with cursor
-	for i in 0 ..< len(display_text) {
-		if i == state.cursor_pos && state.is_focused {
+	// Draw text with cursor.
+	// Iterate by rune so the cursor block replaces a whole character rather
+	// than a single byte of one.
+	byte_pos := 0
+	for byte_pos < len(display_text) {
+		r, size := utf8.decode_rune_in_string(display_text[byte_pos:])
+		if size == 0 {
+			break
+		}
+
+		if byte_pos == state.cursor_pos && state.is_focused {
 			if state.cursor_blink_state {
 				// Show cursor block
 				munin.set_color(buf, cursor_color)
@@ -475,11 +494,13 @@ draw_input_content :: proc(
 			} else {
 				// Show actual character when cursor is "off"
 				munin.set_color(buf, text_color)
-				strings.write_byte(buf, display_text[i])
+				strings.write_rune(buf, r)
 			}
 		} else {
-			strings.write_byte(buf, display_text[i])
+			strings.write_rune(buf, r)
 		}
+
+		byte_pos += size
 	}
 
 	// Draw cursor at end if needed

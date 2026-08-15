@@ -2,6 +2,7 @@ package components
 
 import munin ".."
 import "core:strings"
+import "core:unicode/utf8"
 
 // ============================================================
 // TABLE COMPONENT
@@ -169,23 +170,25 @@ truncate_visible_width :: proc(s: string, width: int) -> string {
 
 	current_width := 0
 	byte_pos := 0
-	for r in s {
+	// Advance by the number of bytes actually consumed. Re-encoding the
+	// decoded rune instead (the old approach) overshoots on malformed UTF-8:
+	// a bad byte decodes to RUNE_ERROR, which "re-encodes" to 3 bytes while
+	// only 1 was consumed, so byte_pos ran past the end of the string and the
+	// slice below went out of bounds.
+	for byte_pos < len(s) {
+		r, size := utf8.decode_rune_in_string(s[byte_pos:])
+		if size == 0 {
+			break
+		}
+
 		rune_width := munin.rune_width(r)
 		if current_width + rune_width > width {
 			break
 		}
 
 		current_width += rune_width
-		if r <= 0x7F {
-			byte_pos += 1
-		} else if r <= 0x7FF {
-			byte_pos += 2
-		} else if r <= 0xFFFF {
-			byte_pos += 3
-		} else {
-			byte_pos += 4
-		}
+		byte_pos += size
 	}
 
-	return s[:byte_pos]
+	return s[:min(byte_pos, len(s))]
 }

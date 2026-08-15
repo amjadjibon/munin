@@ -327,13 +327,16 @@ collapse_all :: proc(node: ^Tree_Node) {
 
 // Find node at path (indices from root)
 find_node_at_path :: proc(roots: []^Tree_Node, path: []int) -> ^Tree_Node {
-	if len(path) == 0 || path[0] >= len(roots) {
+	// Negative indices must be rejected as well as out-of-range ones - a
+	// caller-supplied path is just data, and roots[-1] is an out-of-bounds
+	// read.
+	if len(path) == 0 || path[0] < 0 || path[0] >= len(roots) {
 		return nil
 	}
 
 	current := roots[path[0]]
 	for i in 1 ..< len(path) {
-		if current == nil || path[i] >= len(current.children) {
+		if current == nil || path[i] < 0 || path[i] >= len(current.children) {
 			return nil
 		}
 		current = current.children[path[i]]
@@ -356,6 +359,10 @@ get_visible_nodes :: proc(
 	visible := make([dynamic]Visible_Node, allocator)
 
 	for root, i in roots {
+		if root == nil {
+			continue
+		}
+
 		path := make([dynamic]int, allocator)
 		append(&path, i)
 
@@ -379,6 +386,10 @@ collect_visible_children :: proc(
 	allocator := context.allocator,
 ) {
 	for child, i in children {
+		if child == nil {
+			continue
+		}
+
 		child_path := make([dynamic]int, allocator)
 		for p in parent_path {
 			append(&child_path, p)

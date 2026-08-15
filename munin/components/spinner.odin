@@ -105,14 +105,26 @@ draw_spinner :: proc(
 	}
 }
 
-// Calculate frame index based on direction
+// Calculate frame index based on direction.
+// Always returns an index in [0, frame_count): Odin's % keeps the sign of the
+// dividend, so a negative frame counter would otherwise index before the
+// start of the frame array.
 calculate_frame_index :: proc(frame: int, frame_count: int, direction: Spinner_Direction) -> int {
+	if frame_count <= 0 {
+		return 0
+	}
+
+	f := frame % frame_count
+	if f < 0 {
+		f += frame_count
+	}
+
 	if direction == .Reverse {
 		// Reverse direction: count backwards
-		return (frame_count - (frame % frame_count)) % frame_count
+		return (frame_count - f) % frame_count
 	}
 	// Forward direction: normal
-	return frame % frame_count
+	return f
 }
 
 // Get the number of frames for a spinner style
