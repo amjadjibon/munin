@@ -124,6 +124,34 @@ signals, or the input stream.
 
 ## Memory Management
 
-- Style render functions return heap-allocated strings that must be `delete()`'d
-- Use `context.temp_allocator` for temporary allocations within view functions (cleared each frame)
-- Debug builds support `mem.Tracking_Allocator` for leak detection
+Three ownership conventions exist in the public API. Which one applies is not
+visible from a call site, so it is stated on every procedure that returns a
+string or a collection - check the doc comment before assuming.
+
+**Caller-owned** - `delete()` the result:
+`style_render`, `join_horizontal`, `join_vertical`, `render_tree`,
+`render_tree_styled`, `input_clone_text`, `get_visible_nodes` (via
+`destroy_visible_nodes`).
+
+**Temp arena** - valid until the arena is reset, never `delete()`:
+`sanitize_display`, `pad_string`, and anything a component allocates while
+drawing. The run loop resets the temp arena once per iteration, so a view
+function may allocate freely there.
+
+**Borrowed** - a view into something else's memory, valid only while that
+something is unchanged: `input_get_text` (aliases the input's buffer - use
+`input_clone_text` to store it), `strip_ansi` (returns either the input string
+itself or temp memory, so it must never be freed).
+
+Rules of thumb:
+- In view functions, prefer `context.temp_allocator`; a plain `strings.split`
+  or `strings.repeat` there leaks once per redraw.
+- A procedure must not allocate on a path the caller is expected to discard -
+  returning freshly allocated memory alongside `ok = false` guarantees a leak
+  at the idiomatic call site.
+- `destroy_program` releases a program's buffers; `run` does it for you,
+  including when terminal setup fails.
+- Debug builds support `mem.Tracking_Allocator` for leak detection; several
+  examples install one and print unfreed allocations on exit. Driving an
+  example through `tests/e2e` and reading that report is the quickest way to
+  find a per-frame leak.
