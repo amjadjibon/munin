@@ -225,7 +225,10 @@ update :: proc(msg: Msg, model: Model) -> (Model, bool) {
 		new_model.error_message = ""
 	case AddChatMessage:
 		if len(new_model.chat_message.buffer) > 0 {
-			msg_text := comp.input_get_text(new_model.chat_message)
+			// input_get_text returns a view into the input's own buffer, so
+			// the history has to own a copy: input_clear() below - and every
+			// character typed afterwards - writes over those same bytes.
+			msg_text := strings.clone(comp.input_get_text(new_model.chat_message))
 			append(&new_model.chat_history, msg_text)
 			comp.input_clear(new_model.chat_message)
 		}
@@ -800,7 +803,10 @@ view :: proc(model: Model, buf: ^strings.Builder) {
 
 		// Split results by newline and display each line
 		results_text := mutable_model.results
-		lines := strings.split(results_text, "\n")
+		// Temp arena: this runs on every redraw, and the run loop resets the
+		// arena each iteration. A plain strings.split here leaked one slice
+		// per frame for as long as the results stayed on screen.
+		lines := strings.split(results_text, "\n", context.temp_allocator)
 		for line in lines {
 			if len(line) > 0 {
 				munin.print_at(buf, {4, message_y}, line, .BrightWhite)
@@ -1150,6 +1156,39 @@ draw_settings_form :: proc(buf: ^strings.Builder, pos: munin.Vec2i, model: Model
 }
 
 // Input handler processes keyboard events
+// Release everything init() allocated. Every input state owns a buffer, and
+// the model owns the input states themselves.
+destroy_model :: proc(model: ^Model) {
+	states := []^comp.Input_State {
+		model.login_username,
+		model.login_password,
+		model.reg_username,
+		model.reg_email,
+		model.reg_password,
+		model.reg_confirm,
+		model.card_name,
+		model.card_number,
+		model.card_expiry,
+		model.card_cvv,
+		model.date_year,
+		model.date_month,
+		model.date_day,
+		model.chat_message,
+		model.setting_name,
+		model.setting_email,
+		model.setting_theme,
+	}
+	for state in states {
+		comp.destroy_input_state(state)
+		free(state)
+	}
+
+	for line in model.chat_history {
+		delete(line)
+	}
+	delete(model.chat_history)
+}
+
 input_handler :: proc() -> Maybe(Msg) {
 	if event, ok := munin.read_key().?; ok {
 		#partial switch event.key {
@@ -1222,5 +1261,6 @@ main :: proc() {
 
 	// Create and run program with subscriptions for cursor blinking
 	program := munin.make_program_with_subs(init, update, view, subscriptions)
+	defer destroy_model(&program.model)
 	munin.run(&program, input_handler, target_fps = 60)
 }
