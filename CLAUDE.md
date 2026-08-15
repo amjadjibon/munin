@@ -7,8 +7,15 @@ Munin is a lightweight Terminal User Interface (TUI) framework written in **Odin
 ## Build & Test Commands
 
 ```bash
-# Run tests
-make test              # or: odin test munin
+# Run unit tests
+make test              # or: odin test munin && odin test munin/components
+
+# Run end-to-end tests (builds examples, drives them on a real pty)
+make e2e               # or: python3 tests/e2e/test_examples.py
+make e2e E2E=mouse     # filter by test name
+
+# Everything: unit tests, examples, games, e2e
+make check
 
 # Build all examples
 make examples          # or: ./examples.sh
@@ -46,6 +53,9 @@ munin/                      # Core framework library
     timer.odin, tree.odin
 examples/                  # 20 working example applications
 games/                     # Game implementations (2048)
+tests/e2e/                 # End-to-end tests: example binaries driven on a pty
+  harness.py               # pty process driver + test registry
+  test_examples.py         # Scenarios (terminal setup, input, signals, resize)
 docs/                      # Component documentation (per-component .md files)
 ```
 
@@ -84,9 +94,23 @@ Platform-specific code is separated into `*_posix.odin` and `*_windows.odin` fil
 
 ## Testing
 
-Tests use Odin's built-in `@(test)` attribute. Run with `odin test munin` or `make test`.
+Two layers:
 
-Test coverage includes: ANSI escape stripping, line counting with Unicode/wide chars, terminal mode setup/teardown, input parsing (keyboard and mouse events), rendering utilities, and color parsing.
+**Unit tests** use Odin's built-in `@(test)` attribute, in `*_test.odin` files
+alongside the module they test. Run with `make test`.
+Coverage includes: ANSI escape stripping and sanitization, line counting with
+Unicode/wide chars, terminal mode setup/teardown, input parsing (keyboard,
+mouse, malformed sequences), style rendering and the box model, layout joins,
+color parsing and emission, and every component.
+
+**End-to-end tests** (`tests/e2e/`, Python 3 stdlib only) run the built example
+binaries on a real pty. Run with `make e2e`. They cover what unit tests cannot:
+alternate-screen handling, terminal restore on SIGTERM/SIGINT, real input byte
+streams, input throughput, and window resizes. See `tests/e2e/README.md`.
+
+When fixing a bug, add the regression test at the lowest layer that can catch
+it — and prefer adding an e2e test too when the bug involves the terminal,
+signals, or the input stream.
 
 ## Dependencies
 

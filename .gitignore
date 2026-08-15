@@ -302,3 +302,7 @@ misc/featuregen/featuregen
 .cache/
 .clangd
 compile_commands.json
+
+# Python bytecode (e2e test harness)
+__pycache__/
+*.pyc
