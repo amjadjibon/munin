@@ -83,7 +83,34 @@ make_tree_node :: proc(
 	return node
 }
 
-// Draw a tree starting from root nodes
+// How a tree is emitted.
+//
+// Positioned output moves the cursor to an absolute screen row for each line,
+// which is what a full-screen layout wants. Flowed output separates lines with
+// newlines and emits no cursor movement at all, so the result can be measured,
+// padded, framed by style_render(), or joined next to something else.
+@(private)
+Tree_Render :: struct {
+	positioned:    bool,
+	origin:        munin.Vec2i,
+	line:          int, // lines emitted so far
+	config:        Tree_Config,
+	selected_path: []int,
+	sanitize:      bool,
+}
+
+@(private)
+tree_begin_line :: proc(buf: ^strings.Builder, r: ^Tree_Render) {
+	if r.positioned {
+		munin.move_cursor(buf, {r.origin.x, r.origin.y + r.line})
+	} else if r.line > 0 {
+		strings.write_byte(buf, '\n')
+	}
+	r.line += 1
+}
+
+// Draw a tree starting from root nodes, positioned at pos.
+// Returns the number of lines drawn.
 draw_tree :: proc(
 	buf: ^strings.Builder,
 	pos: munin.Vec2i,
@@ -94,59 +121,85 @@ draw_tree :: proc(
 	// usually shows filenames or other data the application did not author.
 	sanitize: bool = true,
 ) -> int {
-	current_y := pos.y
-	for root, i in roots {
-		lines_drawn := draw_tree_node(
-			buf,
-			{pos.x, current_y},
-			root,
-			0, // depth
-			i == len(roots) - 1, // is_last at this level
-			{}, // prefix (empty for root)
-			selected_path,
-			0, // path_index
-			i, // current_index in path
-			config,
-			sanitize,
-		)
-		current_y += lines_drawn
+	r := Tree_Render {
+		positioned    = true,
+		origin        = pos,
+		config        = config,
+		selected_path = selected_path,
+		sanitize      = sanitize,
 	}
-	return current_y - pos.y
+	write_tree(buf, roots, &r)
+	return r.line
 }
 
-// Internal: Draw a single tree node and its children recursively
+// Render a tree as flowed text: newline-separated lines, no cursor movement.
+//
+// Use this when the tree has to compose with anything else - style_render(),
+// join_horizontal(), a measured region. draw_tree() writes absolute cursor
+// moves, which ignore wherever the surrounding layout meant to put the
+// content.
+//
+// The result is owned by the caller.
+render_tree :: proc(
+	roots: []^Tree_Node,
+	selected_path: []int = nil,
+	config: Tree_Config,
+	sanitize: bool = true,
+	allocator := context.allocator,
+) -> string {
+	buf := strings.builder_make(allocator)
+
+	r := Tree_Render {
+		positioned    = false,
+		config        = config,
+		selected_path = selected_path,
+		sanitize      = sanitize,
+	}
+	write_tree(buf_ptr(&buf), roots, &r)
+
+	return strings.to_string(buf)
+}
+
 @(private)
-draw_tree_node :: proc(
+buf_ptr :: proc(b: ^strings.Builder) -> ^strings.Builder {
+	return b
+}
+
+@(private)
+write_tree :: proc(buf: ^strings.Builder, roots: []^Tree_Node, r: ^Tree_Render) {
+	for root, i in roots {
+		write_tree_node(buf, root, 0, i == len(roots) - 1, "", 0, i, r)
+	}
+}
+
+// Internal: write a single tree node and its children recursively
+@(private)
+write_tree_node :: proc(
 	buf: ^strings.Builder,
-	pos: munin.Vec2i,
 	node: ^Tree_Node,
 	depth: int,
 	is_last: bool,
 	prefix: string,
-	selected_path: []int,
 	path_index: int,
 	current_index: int,
-	config: Tree_Config,
-	sanitize: bool,
-) -> int {
+	r: ^Tree_Render,
+) {
 	if node == nil {
-		return 0
+		return
 	}
 
-	lines_drawn := 0
-	current_y := pos.y
+	config := r.config
 
 	// Check if this node is selected
 	is_selected := false
-	if len(selected_path) > path_index {
-		is_selected = selected_path[path_index] == current_index
-		if path_index < len(selected_path) - 1 {
+	if len(r.selected_path) > path_index {
+		is_selected = r.selected_path[path_index] == current_index
+		if path_index < len(r.selected_path) - 1 {
 			is_selected = false // Not the final node in path
 		}
 	}
 
-	// Draw the current line
-	munin.move_cursor(buf, {pos.x, current_y})
+	tree_begin_line(buf, r)
 
 	// Draw prefix (inherited from parent levels)
 	if len(prefix) > 0 {
@@ -234,43 +287,39 @@ draw_tree_node :: proc(
 	}
 
 	munin.set_color(buf, label_color)
-	strings.write_string(buf, display_text(node.label, sanitize))
+	strings.write_string(buf, display_text(node.label, r.sanitize))
 	munin.reset_style(buf)
-
-	lines_drawn += 1
-	current_y += 1
 
 	// Draw children if expanded
 	if node.expanded && len(node.children) > 0 {
 		// Check if we should continue down the selected path
 		next_path_index := path_index
-		if is_selected && path_index < len(selected_path) - 1 {
+		if is_selected && path_index < len(r.selected_path) - 1 {
 			next_path_index = path_index + 1
 		}
 
 		for child, i in node.children {
-			child_lines := draw_tree_node(
+			write_tree_node(
 				buf,
-				{pos.x, current_y},
 				child,
 				depth + 1,
 				i == len(node.children) - 1,
 				next_prefix,
-				selected_path,
 				next_path_index,
 				i,
-				config,
-				sanitize,
+				r,
 			)
-			lines_drawn += child_lines
-			current_y += child_lines
 		}
 	}
-
-	return lines_drawn
 }
 
-// Styled tree: Render tree to a styled string
+// Styled tree: render the tree as flowed text and apply a style to it.
+//
+// This goes through render_tree(), not draw_tree(): a tree drawn with absolute
+// cursor moves lands wherever those moves point, not inside the border and
+// padding the style just laid out around it.
+//
+// The result is owned by the caller.
 render_tree_styled :: proc(
 	roots: []^Tree_Node,
 	selected_path: []int = nil,
@@ -278,13 +327,7 @@ render_tree_styled :: proc(
 	style: munin.Style,
 	sanitize: bool = true,
 ) -> string {
-	buf := strings.builder_make()
-	defer strings.builder_destroy(&buf)
-
-	// Render tree content
-	draw_tree(&buf, {0, 0}, roots, selected_path, config, sanitize)
-
-	content := strings.to_string(buf)
+	content := render_tree(roots, selected_path, config, sanitize, context.temp_allocator)
 
 	// Apply style if provided
 	if style.foreground != nil ||

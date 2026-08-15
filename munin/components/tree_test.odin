@@ -367,6 +367,59 @@ test_draw_tree_handles_nil_node :: proc(t: ^testing.T) {
 }
 
 @(test)
+test_render_tree_emits_flowed_text :: proc(t: ^testing.T) {
+	// Regression: the tree was only available as absolutely-positioned output
+	// (cursor moves), which cannot be measured, padded, framed or joined.
+	roots, nodes := make_fixture()
+	defer destroy_fixture(roots, nodes)
+	expand_all(roots[0])
+
+	out := render_tree(roots, nil, default_tree_config())
+	defer delete(out)
+
+	testing.expect(t, !strings.contains(out, "\x1b[1;1H"), "should not position the cursor")
+	testing.expect(t, !strings.contains(out, "H\x1b"), "should not position the cursor")
+	testing.expect_value(t, strings.count(out, "\n"), 3) // 4 lines
+	free_all(context.temp_allocator)
+}
+
+@(test)
+test_render_tree_styled_puts_the_tree_inside_the_border :: proc(t: ^testing.T) {
+	roots, nodes := make_fixture()
+	defer destroy_fixture(roots, nodes)
+
+	style := munin.style_padding_all(
+		munin.style_border(munin.new_style(), munin.Border_Normal),
+		1,
+	)
+	out := render_tree_styled(roots, nil, default_tree_config(), style)
+	defer delete(out)
+
+	testing.expect(t, !strings.contains(out, "\x1b[1;1H"), "no absolute cursor moves")
+
+	lines := strings.split(strings.trim_right(out, "\n"), "\n", context.temp_allocator)
+	testing.expect(t, len(lines) >= 5, "border + padding + 3 content rows")
+
+	// Every row of a framed block is the same width, and the content rows sit
+	// between the border characters.
+	expected := munin.get_visible_width(lines[0])
+	for line, i in lines {
+		testing.expectf(
+			t,
+			munin.get_visible_width(line) == expected,
+			"row %d is %d cells, expected %d",
+			i,
+			munin.get_visible_width(line),
+			expected,
+		)
+	}
+	testing.expect(t, strings.contains(lines[0], "\u250c"), "top border")
+	testing.expect(t, strings.contains(lines[2], "root"), "content inside the frame")
+	testing.expect(t, strings.contains(lines[2], "\u2502"), "content row is framed")
+	free_all(context.temp_allocator)
+}
+
+@(test)
 test_render_tree_styled_plain :: proc(t: ^testing.T) {
 	roots, nodes := make_fixture()
 	defer destroy_fixture(roots, nodes)
