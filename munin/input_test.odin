@@ -2,6 +2,10 @@ package munin
 
 import "core:testing"
 
+// The input parser under test is the POSIX one; the Windows port reads
+// console records instead and shares none of this code.
+when ODIN_OS != .Windows {
+
 // ============================================================
 // INPUT TESTS - Keyboard and Mouse Event Parsing
 // ============================================================
@@ -625,4 +629,5 @@ test_parse_ctrl_c :: proc(t: ^testing.T) {
 			testing.expect(t, false, "Expected Key_Event")
 		}
 	}
+}
 }

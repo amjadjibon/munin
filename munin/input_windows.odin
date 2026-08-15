@@ -4,6 +4,27 @@ import win32 "core:sys/windows"
 
 when ODIN_OS == .Windows {
 
+	// Console input constants that core:sys/windows does not declare.
+	// Values from wincon.h.
+	@(private)
+	FROM_LEFT_1ST_BUTTON_PRESSED :: win32.DWORD(0x0001)
+	@(private)
+	RIGHTMOST_BUTTON_PRESSED :: win32.DWORD(0x0002)
+	@(private)
+	FROM_LEFT_2ND_BUTTON_PRESSED :: win32.DWORD(0x0004)
+
+	@(private)
+	MOUSE_MOVED :: win32.DWORD(0x0001)
+	@(private)
+	MOUSE_WHEELED :: win32.DWORD(0x0004)
+
+	@(private)
+	MOUSE_SHIFT_PRESSED :: win32.DWORD(0x0010)
+	@(private)
+	MOUSE_ALT_PRESSED :: win32.DWORD(0x0001 | 0x0002) // right | left
+	@(private)
+	MOUSE_CTRL_PRESSED :: win32.DWORD(0x0004 | 0x0008) // right | left
+
 	read_input :: proc() -> Maybe(Input_Event) {
 		stdin := win32.GetStdHandle(win32.STD_INPUT_HANDLE)
 		events_read: win32.DWORD
@@ -18,15 +39,18 @@ when ODIN_OS == .Windows {
 		}
 
 		// Handle keyboard events
-		if event.EventType == win32.KEY_EVENT && event.Event.KeyEvent.bKeyDown {
+		if event.EventType == .KEY_EVENT && event.Event.KeyEvent.bKeyDown {
 			vk := event.Event.KeyEvent.wVirtualKeyCode
 			ch := event.Event.KeyEvent.uChar.UnicodeChar
-			shift_key_state := event.Event.KeyEvent.dwControlKeyState & win32.SHIFT_PRESSED != 0
+			key_state := event.Event.KeyEvent.dwControlKeyState
 
 			result := Key_Event {
 				key   = .Char,
 				char  = rune(ch),
-				shift = shift_key_state,
+				shift = .SHIFT_PRESSED in key_state,
+				ctrl  = .LEFT_CTRL_PRESSED in key_state ||
+				.RIGHT_CTRL_PRESSED in key_state,
+				alt   = .LEFT_ALT_PRESSED in key_state || .RIGHT_ALT_PRESSED in key_state,
 			}
 
 			switch vk {
@@ -56,7 +80,7 @@ when ODIN_OS == .Windows {
 		}
 
 		// Handle mouse events
-		if event.EventType == win32.MOUSE_EVENT {
+		if event.EventType == .MOUSE_EVENT {
 			mouse := event.Event.MouseEvent
 			pos := mouse.dwMousePosition
 			button_state := mouse.dwButtonState
@@ -65,23 +89,23 @@ when ODIN_OS == .Windows {
 
 			// Determine button
 			button: Mouse_Button = .None
-			if button_state & win32.FROM_LEFT_1ST_BUTTON_PRESSED != 0 {
+			if button_state & FROM_LEFT_1ST_BUTTON_PRESSED != 0 {
 				button = .Left
-			} else if button_state & win32.RIGHTMOST_BUTTON_PRESSED != 0 {
+			} else if button_state & RIGHTMOST_BUTTON_PRESSED != 0 {
 				button = .Right
-			} else if button_state & win32.FROM_LEFT_2ND_BUTTON_PRESSED != 0 {
+			} else if button_state & FROM_LEFT_2ND_BUTTON_PRESSED != 0 {
 				button = .Middle
 			}
 
 			// Determine event type
 			mouse_event_type: Mouse_Event_Type
-			if event_flags & win32.MOUSE_MOVED != 0 {
-				mouse_event_type = .Move if button == .None else .Drag
-			} else if event_flags & win32.MOUSE_WHEELED != 0 {
-				// Wheel direction is in high word of button_state
-				wheel_delta := i32(button_state >> 16)
+			if event_flags & MOUSE_WHEELED != 0 {
+				// Wheel direction is in the high word of the button state
+				wheel_delta := i16(button_state >> 16)
 				button = .WheelUp if wheel_delta > 0 else .WheelDown
 				mouse_event_type = .Press
+			} else if event_flags & MOUSE_MOVED != 0 {
+				mouse_event_type = .Move if button == .None else .Drag
 			} else {
 				// Press or release based on button state
 				mouse_event_type = .Press if button != .None else .Release
@@ -90,11 +114,11 @@ when ODIN_OS == .Windows {
 			return Mouse_Event {
 				button = button,
 				type = mouse_event_type,
-				x = int(pos.X),
-				y = int(pos.Y),
-				shift = ctrl_key_state & win32.SHIFT_PRESSED != 0,
-				ctrl = ctrl_key_state & (win32.LEFT_CTRL_PRESSED | win32.RIGHT_CTRL_PRESSED) != 0,
-				alt = ctrl_key_state & (win32.LEFT_ALT_PRESSED | win32.RIGHT_ALT_PRESSED) != 0,
+				x = max(int(pos.X), 0),
+				y = max(int(pos.Y), 0),
+				shift = ctrl_key_state & MOUSE_SHIFT_PRESSED != 0,
+				ctrl = ctrl_key_state & MOUSE_CTRL_PRESSED != 0,
+				alt = ctrl_key_state & MOUSE_ALT_PRESSED != 0,
 			}
 		}
 
