@@ -239,7 +239,7 @@ test_view :: proc(model: Model, buf: ^strings.Builder) {
 @(test)
 test_make_program_without_subs :: proc(t: ^testing.T) {
 	program := make_program(test_init, test_update, test_view)
-	defer strings.builder_destroy(&program.buffer)
+	defer destroy_program(&program)
 
 	testing.expect_value(t, program.running, true)
 	testing.expect_value(t, program.screen_mode, Screen_Mode.Fullscreen)
@@ -257,7 +257,7 @@ test_subscriptions :: proc(model: Model) -> Maybe(Msg) {
 @(test)
 test_make_program_with_subs :: proc(t: ^testing.T) {
 	program := make_program(test_init, test_update, test_view, test_subscriptions)
-	defer strings.builder_destroy(&program.buffer)
+	defer destroy_program(&program)
 
 	testing.expect_value(t, program.running, true)
 	testing.expect(t, program.subscriptions != nil, "Should have subscriptions")
@@ -278,7 +278,7 @@ test_make_program_with_subs :: proc(t: ^testing.T) {
 @(test)
 test_screen_mode_toggle :: proc(t: ^testing.T) {
 	program := make_program(test_init, test_update, test_view)
-	defer strings.builder_destroy(&program.buffer)
+	defer destroy_program(&program)
 
 	// Initial mode
 	testing.expect_value(t, program.screen_mode, Screen_Mode.Fullscreen)
@@ -290,7 +290,7 @@ test_screen_mode_toggle :: proc(t: ^testing.T) {
 @(test)
 test_set_screen_mode_same :: proc(t: ^testing.T) {
 	program := make_program(test_init, test_update, test_view)
-	defer strings.builder_destroy(&program.buffer)
+	defer destroy_program(&program)
 
 	// Setting to same mode should be no-op
 	// We can't fully test this without terminal, but verify initial state
@@ -340,4 +340,61 @@ test_count_lines_very_long_line :: proc(t: ^testing.T) {
 	// Should be > 1 if terminal is normal width (e.g., 80 cols -> ~3 lines)
 	// We can't guarantee exact value without knowing terminal size
 	testing.expect(t, lines >= 1, "Should count at least 1 line")
+}
+
+// ============================================================
+// SANITIZATION (REGRESSION)
+// ============================================================
+
+@(test)
+test_sanitize_display_strips_osc :: proc(t: ^testing.T) {
+	// OSC 52 writes the user's clipboard - it must never survive to the
+	// terminal from untrusted text.
+	input := "safe\x1b]52;c;cGF5bG9hZA==\x07text"
+	testing.expect_value(t, sanitize_display(input), "safetext")
+}
+
+@(test)
+test_sanitize_display_strips_dcs :: proc(t: ^testing.T) {
+	input := "a\x1bPpayload\x1b\\b"
+	testing.expect_value(t, sanitize_display(input), "ab")
+}
+
+@(test)
+test_sanitize_display_strips_control_bytes :: proc(t: ^testing.T) {
+	input := "a\x07b\rc\x7fd"
+	testing.expect_value(t, sanitize_display(input), "abcd")
+}
+
+@(test)
+test_sanitize_display_keeps_newline_and_tab :: proc(t: ^testing.T) {
+	testing.expect_value(t, sanitize_display("a\nb\tc"), "a\nb\tc")
+}
+
+@(test)
+test_sanitize_display_keeps_unicode :: proc(t: ^testing.T) {
+	testing.expect_value(t, sanitize_display("héllo 你好 😀"), "héllo 你好 😀")
+}
+
+@(test)
+test_sanitize_display_strips_csi :: proc(t: ^testing.T) {
+	testing.expect_value(t, sanitize_display("\x1b[2J\x1b[31mred\x1b[0m"), "red")
+}
+
+@(test)
+test_strip_ansi_dcs_body_removed :: proc(t: ^testing.T) {
+	// The DCS body used to be emitted as if it were ordinary text.
+	testing.expect_value(t, strip_ansi("a\x1bPbody\x1b\\b"), "ab")
+}
+
+@(test)
+test_set_window_title_sanitizes :: proc(t: ^testing.T) {
+	b := strings.builder_make()
+	defer strings.builder_destroy(&b)
+
+	// A BEL inside the title would close the OSC string early and let the
+	// remainder execute as terminal commands.
+	set_window_title(&b, "evil\x07\x1b]52;c;cGF5bG9hZA==\x07")
+	out := strings.to_string(b)
+	testing.expect_value(t, out, "\x1b]0;evil\x07")
 }

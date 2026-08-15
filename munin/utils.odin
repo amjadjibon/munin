@@ -37,11 +37,13 @@ show_cursor :: proc(buf: ^strings.Builder) {
 }
 
 set_color :: proc(buf: ^strings.Builder, color: Color) {
-	strings.write_string(buf, color_to_ansi(color, false))
+	// write_ansi_color writes straight into the builder; color_to_ansi would
+	// spin up a throwaway builder per call, and these run per cell.
+	write_ansi_color(buf, color, false)
 }
 
 set_bg_color :: proc(buf: ^strings.Builder, color: Color) {
-	strings.write_string(buf, color_to_ansi(color, true))
+	write_ansi_color(buf, color, true)
 }
 
 set_bold :: proc(buf: ^strings.Builder) {
@@ -183,8 +185,14 @@ draw_title :: proc(
 
 // Set the terminal window title using ANSI escape sequence
 // Note: This must be called from the render buffer to take effect
+//
+// The title is sanitized first: an unescaped BEL or ST in the title would
+// close the OSC string early and let the rest of it run as terminal commands.
 set_window_title :: proc(buf: ^strings.Builder, title: string) {
 	// OSC 0 ; title BEL
 	// \x1b]0; sets the window title, \x07 is BEL (bell/terminator)
-	fmt.sbprintf(buf, "\x1b]0;%s\x07", title)
+	safe := sanitize_display(title)
+	strings.write_string(buf, "\x1b]0;")
+	strings.write_string(buf, safe)
+	strings.write_string(buf, "\x07")
 }

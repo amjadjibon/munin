@@ -2,17 +2,19 @@ package munin
 
 import "core:fmt"
 import "core:mem"
+import "core:os"
 import "core:strings"
 import "core:time"
-import "core:unicode/utf8"
 
-// Foreign imports for system calls
-when ODIN_OS != .Windows {
-	foreign import libc "system:c"
-	@(default_calling_convention = "c")
-	foreign libc {
-		fflush :: proc(stream: rawptr) -> i32 ---
+// Write directly to stdout. Odin's fmt.print goes straight to the file
+// descriptor (there is no libc stream to flush), so the way to cut syscalls
+// is to batch a frame into one string and write it once.
+@(private)
+term_write :: proc(s: string) {
+	if len(s) == 0 {
+		return
 	}
+	os.write_string(os.stdout, s)
 }
 
 // ============================================================
@@ -35,6 +37,7 @@ Program :: struct($Model, $Msg: typeid) {
 	view:            proc(model: Model, buf: ^strings.Builder),
 	subscriptions:   Maybe(proc(model: Model) -> Maybe(Msg)),
 	buffer:          strings.Builder,
+	out_buffer:      strings.Builder, // Frame assembled here so it can be written in one syscall
 	allocator:       mem.Allocator,
 	last_line_count: int, // Track number of lines rendered (for inline mode)
 	clear_on_exit:   bool, // Whether to clear screen on exit
@@ -44,8 +47,15 @@ Program :: struct($Model, $Msg: typeid) {
 // HELPER FUNCTIONS
 // ============================================================
 
-// Strip ANSI escape sequences from a string to get visual content
-// Optimized version: avoids allocation if no ANSI codes present
+// Strip ANSI escape sequences from a string to get visual content.
+// Optimized version: avoids allocation if no ANSI codes present.
+//
+// The result is either the input string itself or a slice allocated in
+// context.temp_allocator, so it is only valid until the arena is reset.
+//
+// NOTE: this removes escape sequences but leaves other control bytes (BEL,
+// CR, ...) in place - it is a measurement helper, not a security boundary.
+// Use sanitize_display() before showing untrusted text.
 strip_ansi :: proc(s: string) -> string {
 	if len(s) == 0 {
 		return s
@@ -65,57 +75,75 @@ strip_ansi :: proc(s: string) -> string {
 		return s
 	}
 
-	// Slow path: allocate and strip ANSI codes
+	// Slow path: allocate and strip ANSI codes.
+	// Sequence boundaries come from skip_escape_sequence(), so CSI, OSC, DCS,
+	// SOS, PM and APC forms are all consumed whole - a DCS body used to be
+	// emitted as if it were text.
 	result := make([]byte, len(s), context.temp_allocator)
 	result_len := 0
 	i := 0
 
 	for i < len(s) {
-		// Check for ANSI escape sequence (ESC [ ... m or other control sequences)
 		if s[i] == 0x1b {
-			// Bounds check once
-			if i + 1 >= len(s) {
-				// Incomplete escape at end, skip it
-				break
-			}
-
-			// Skip escape character
-			i += 1
-
-			// Handle CSI sequences (ESC [ ...)
-			if s[i] == '[' {
-				i += 1
-				// Skip until we find a letter (typically m, H, J, K, etc.)
-				for i < len(s) {
-					ch := s[i]
-					i += 1
-					// Optimized: single comparison using ranges
-					if (ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') {
-						break
-					}
-				}
-			} else if s[i] == ']' {
-				// Handle OSC sequences (ESC ] ... BEL or ESC ] ... ST)
-				i += 1
-				for i < len(s) {
-					if s[i] == 0x07 { 	// BEL
-						i += 1
-						break
-					}
-					// Check for ST (ESC \) with single bounds check
-					if i + 1 < len(s) && s[i] == 0x1b && s[i + 1] == '\\' {
-						i += 2
-						break
-					}
-					i += 1
-				}
-			}
-		} else {
-			// Regular character - no extra checks needed
-			result[result_len] = s[i]
-			result_len += 1
-			i += 1
+			i = skip_escape_sequence(s, i)
+			continue
 		}
+		result[result_len] = s[i]
+		result_len += 1
+		i += 1
+	}
+
+	return string(result[:result_len])
+}
+
+// Remove everything from s that could make the terminal do something rather
+// than display something: escape sequences of every form, plus the C0/C1
+// control bytes (newline and tab are kept).
+//
+// Use this on any text that did not come from your own program - file names,
+// log lines, API responses - before writing it to the screen. Without it a
+// crafted string can move the cursor, rewrite the window title, or drive OSC
+// 52 to write the user's clipboard.
+//
+// Returns a string allocated with `allocator` (temp arena by default).
+sanitize_display :: proc(s: string, allocator := context.temp_allocator) -> string {
+	if len(s) == 0 {
+		return s
+	}
+
+	result := make([]byte, len(s), allocator)
+	result_len := 0
+	i := 0
+
+	for i < len(s) {
+		b := s[i]
+
+		if b == 0x1b {
+			i = skip_escape_sequence(s, i)
+			continue
+		}
+
+		// C0 controls, except the two that are legitimate in display text.
+		if b < 0x20 && b != '\n' && b != '\t' {
+			i += 1
+			continue
+		}
+
+		// DEL
+		if b == 0x7F {
+			i += 1
+			continue
+		}
+
+		// C1 controls arrive as the two-byte UTF-8 sequences C2 80..C2 9F.
+		if b == 0xC2 && i + 1 < len(s) && s[i + 1] >= 0x80 && s[i + 1] <= 0x9F {
+			i += 2
+			continue
+		}
+
+		result[result_len] = b
+		result_len += 1
+		i += 1
 	}
 
 	return string(result[:result_len])
@@ -142,41 +170,25 @@ rune_visual_width :: proc(r: rune) -> int {
 		return 1 // Latin-1 Supplement and other narrow chars
 	}
 
-	// Wide characters - check ranges
-	if (r >= 0x1100 && r <= 0x115F) ||
-	   (r >= 0x2E80 && r <= 0x2EFF) ||
-	   (r >= 0x2F00 && r <= 0x2FDF) ||
-	   (r >= 0x3000 && r <= 0x303F) ||
-	   (r >= 0x3040 && r <= 0x309F) ||
-	   (r >= 0x30A0 && r <= 0x30FF) ||
-	   (r >= 0x3400 && r <= 0x4DBF) ||
-	   (r >= 0x4E00 && r <= 0x9FFF) ||
-	   (r >= 0xAC00 && r <= 0xD7AF) ||
-	   (r >= 0xF900 && r <= 0xFAFF) ||
-	   (r >= 0xFE30 && r <= 0xFE4F) ||
-	   (r >= 0xFF00 && r <= 0xFF60) ||
-	   (r >= 0xFFE0 && r <= 0xFFE6) ||
-	   (r >= 0x1F300 && r <= 0x1F5FF) ||
-	   (r >= 0x1F600 && r <= 0x1F64F) ||
-	   (r >= 0x1F680 && r <= 0x1F6FF) ||
-	   (r >= 0x1F900 && r <= 0x1F9FF) ||
-	   (r >= 0x1FA70 && r <= 0x1FAFF) ||
-	   (r >= 0x20000 && r <= 0x2FFFF) {
-		// Hangul Jamo
-		// CJK Radicals
-		// Kangxi Radicals
-		// CJK Symbols and Punctuation
-		// Hiragana
-		// Katakana
-		// CJK Extension A
-		// CJK Unified Ideographs
-		// CJK Compatibility
-		// Misc Symbols and Pictographs
-		// Emoticons
-		// Transport and Map Symbols
-		// Supplemental Symbols and Pictographs
-		// Symbols and Pictographs Extended-A
-		// CJK Extension B, C, D, E
+	// Wide characters - check ranges.
+	// This is the single source of truth for character width in the whole
+	// framework; layout.odin's rune_width() forwards here so that line
+	// counting and layout can never disagree about the same string.
+	if (r >= 0x1100 && r <= 0x115F) || // Hangul Jamo
+	   (r >= 0x2329 && r <= 0x232A) || // Angle brackets
+	   (r >= 0x2E80 && r <= 0x303F) || // CJK Radicals, Kangxi, CJK Symbols and Punctuation
+	   (r >= 0x3040 && r <= 0xA4CF) || // Kana, CJK Extension A, CJK Unified Ideographs, Yi
+	   (r >= 0xAC00 && r <= 0xD7A3) || // Hangul Syllables
+	   (r >= 0xF900 && r <= 0xFAFF) || // CJK Compatibility Ideographs
+	   (r >= 0xFE10 && r <= 0xFE19) || // Vertical Forms
+	   (r >= 0xFE30 && r <= 0xFE6F) || // CJK Compatibility Forms, Small Form Variants
+	   (r >= 0xFF00 && r <= 0xFF60) || // Fullwidth Forms
+	   (r >= 0xFFE0 && r <= 0xFFE6) || // Fullwidth Signs
+	   (r >= 0x1F300 && r <= 0x1F64F) || // Misc Symbols and Pictographs, Emoticons
+	   (r >= 0x1F680 && r <= 0x1F6FF) || // Transport and Map Symbols
+	   (r >= 0x1F900 && r <= 0x1F9FF) || // Supplemental Symbols and Pictographs
+	   (r >= 0x1FA70 && r <= 0x1FAFF) || // Symbols and Pictographs Extended-A
+	   (r >= 0x20000 && r <= 0x2FFFF) { 	// CJK Extension B, C, D, E
 		return 2
 	}
 
@@ -256,6 +268,8 @@ make_program_without_subs :: proc(
 ) -> Program(Model, Msg) {
 	buffer :=
 		strings.builder_make_len_cap(0, 4096, allocator) or_else strings.builder_make(allocator)
+	out_buffer :=
+		strings.builder_make_len_cap(0, 4096, allocator) or_else strings.builder_make(allocator)
 	return Program(Model, Msg) {
 		model = init(),
 		running = true,
@@ -265,6 +279,7 @@ make_program_without_subs :: proc(
 		view = view,
 		subscriptions = nil,
 		buffer = buffer,
+		out_buffer = out_buffer,
 		allocator = allocator,
 	}
 }
@@ -279,6 +294,8 @@ make_program_with_subs :: proc(
 ) -> Program(Model, Msg) {
 	buffer :=
 		strings.builder_make_len_cap(0, 4096, allocator) or_else strings.builder_make(allocator)
+	out_buffer :=
+		strings.builder_make_len_cap(0, 4096, allocator) or_else strings.builder_make(allocator)
 	return Program(Model, Msg) {
 		model = init(),
 		running = true,
@@ -288,8 +305,17 @@ make_program_with_subs :: proc(
 		view = view,
 		subscriptions = subscriptions,
 		buffer = buffer,
+		out_buffer = out_buffer,
 		allocator = allocator,
 	}
+}
+
+// Free the buffers owned by a program.
+// run() does this on exit; call it yourself if you build a program without
+// running it.
+destroy_program :: proc(program: ^Program($Model, $Msg)) {
+	strings.builder_destroy(&program.buffer)
+	strings.builder_destroy(&program.out_buffer)
 }
 
 // ============================================================
@@ -300,20 +326,22 @@ make_program_with_subs :: proc(
 toggle_screen_mode :: proc(program: ^Program($Model, $Msg)) {
 	if program.screen_mode == .Fullscreen {
 		// Switching from fullscreen to inline
-		fmt.print("\x1b[?1049l") // Disable alternative screen
+		term_write("\x1b[?1049l") // Disable alternative screen
 		program.screen_mode = .Inline
 		program.last_line_count = 0 // Reset line count for inline mode
+		set_cleanup_altscreen(false)
 	} else {
 		// Switching from inline to fullscreen
 		// First, clear the inline content by moving up and clearing
 		if program.last_line_count > 0 {
-			fmt.print("\r")
-			fmt.printf("\x1b[%dA", program.last_line_count) // Move up
-			fmt.print("\x1b[J") // Clear from cursor down
+			term_write("\r")
+			term_write(fmt.tprintf("\x1b[%dA", program.last_line_count)) // Move up
+			term_write("\x1b[J") // Clear from cursor down
 		}
-		fmt.print("\x1b[?1049h") // Enable alternative screen
+		term_write("\x1b[?1049h") // Enable alternative screen
 		program.screen_mode = .Fullscreen
 		program.last_line_count = 0 // Reset line count
+		set_cleanup_altscreen(true)
 	}
 }
 
@@ -350,18 +378,19 @@ run :: proc(
 	}
 	defer restore_mode(state)
 	defer strings.builder_destroy(&program.buffer)
+	defer strings.builder_destroy(&program.out_buffer)
 
 	// Clear screen on exit if requested
 	defer {
 		if program.clear_on_exit {
 			if program.screen_mode == .Inline && program.last_line_count > 0 {
 				// In inline mode, clear the rendered content
-				fmt.print("\r")
-				fmt.printf("\x1b[%dA", program.last_line_count)
-				fmt.print("\x1b[J")
+				term_write("\r")
+				term_write(fmt.tprintf("\x1b[%dA", program.last_line_count))
+				term_write("\x1b[J")
 			} else if program.screen_mode == .Fullscreen {
 				// In fullscreen mode, clear the screen
-				fmt.print("\x1b[H\x1b[J")
+				term_write("\x1b[H\x1b[J")
 			}
 		}
 	}
@@ -369,19 +398,27 @@ run :: proc(
 	// Use the program's allocator for the remainder of execution
 	context.allocator = program.allocator
 
-	// Enable alternative screen buffer (only if fullscreen mode)
-	if program.screen_mode == .Fullscreen {
-		fmt.print("\x1b[?1049h")
-		defer fmt.print("\x1b[?1049l")
+	// Enable alternative screen buffer (only if fullscreen mode).
+	// NOTE: the disable must NOT be deferred inside this `if` - Odin's defer
+	// is scoped to the enclosing block, so an `if`-local defer fires at the
+	// end of the `if`, turning the alt screen straight back off.
+	// The check on exit reads the current mode, so a toggle_screen_mode() in
+	// between still leaves the alt screen balanced.
+	used_altscreen := program.screen_mode == .Fullscreen
+	if used_altscreen {
+		term_write("\x1b[?1049h")
+	}
+	defer if program.screen_mode == .Fullscreen {
+		term_write("\x1b[?1049l")
 	}
 
 	// Hide cursor
-	fmt.print("\x1b[?25l")
-	defer fmt.print("\x1b[?25h")
+	term_write("\x1b[?25l")
+	defer term_write("\x1b[?25h")
 
 	// Disable line wrapping to prevent visual artifacts
-	fmt.print("\x1b[?7l")
-	defer fmt.print("\x1b[?7h")
+	term_write("\x1b[?7l")
+	defer term_write("\x1b[?7h")
 
 	// Enable mouse tracking only if explicitly requested
 	// ?1000 = Enable mouse tracking (button press/release)
@@ -389,20 +426,30 @@ run :: proc(
 	// ?1003 = Enable all motion tracking (including hover)
 	// ?1006 = Enable SGR extended mouse mode
 	if enable_mouse {
-		fmt.print("\x1b[?1000h\x1b[?1002h\x1b[?1003h\x1b[?1006h")
+		term_write("\x1b[?1000h\x1b[?1002h\x1b[?1003h\x1b[?1006h")
 	}
 	defer if enable_mouse {
-		fmt.print("\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1006l")
+		term_write("\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1006l")
 	}
 
-	// Setup window resize detection
+	// Setup window resize detection and terminal restore on fatal signals
+	set_cleanup_state(enable_mouse, used_altscreen)
 	setup_resize_handler()
 
 	// Track if we need to redraw
 	needs_redraw := true
 
-	// Frame timing
-	FRAME_TIME := time.Second / time.Duration(target_fps)
+	// Frame timing. Guard the divisor: target_fps = 0 would divide by zero.
+	fps := max(target_fps, 1)
+	FRAME_TIME := time.Second / time.Duration(fps)
+	// Poll input more often than we draw so a keystroke is not sitting in the
+	// buffer for a whole frame before anyone looks at it. The floor keeps a
+	// very high target_fps from turning this into a busy spin.
+	POLL_TIME := max(min(FRAME_TIME / 8, 2 * time.Millisecond), 100 * time.Microsecond)
+	// Cap on events handled per iteration, so a large paste cannot starve
+	// rendering - but high enough that pasted text is not throttled to one
+	// character per frame the way it used to be.
+	MAX_EVENTS_PER_ITERATION :: 256
 	last_frame_time := time.now()
 
 	// Main loop
@@ -414,13 +461,20 @@ run :: proc(
 			needs_redraw = true
 		}
 
-		// Handle input
-		if msg, has_msg := input_handler().?; has_msg {
+		// Drain all pending input. Handling only one event per iteration
+		// capped throughput at target_fps events/second, so pasting a line of
+		// text took seconds and overflowed the input buffer.
+		for _ in 0 ..< MAX_EVENTS_PER_ITERATION {
+			msg, has_msg := input_handler().?
+			if !has_msg {
+				break
+			}
 			new_model, should_quit := program.update(msg, program.model)
 			program.model = new_model
 			needs_redraw = true // Mark for redraw on input
 			if should_quit {
 				program.running = false
+				break
 			}
 		}
 
@@ -448,6 +502,11 @@ run :: proc(
 			// Get output
 			output := strings.to_string(program.buffer)
 
+			// Assemble the whole frame - control sequences included - and
+			// write it with a single syscall, so the terminal never sees a
+			// half-updated screen between writes.
+			strings.builder_reset(&program.out_buffer)
+
 			// Handle inline mode rendering differently
 			if program.screen_mode == .Inline {
 				// Count lines in new output
@@ -456,38 +515,43 @@ run :: proc(
 				// Move cursor up by previous line count (skip on first render)
 				if program.last_line_count > 0 {
 					// Move to beginning of line first, then move up
-					fmt.print("\r")
-					fmt.printf("\x1b[%dA", program.last_line_count)
+					strings.write_string(&program.out_buffer, "\r")
+					fmt.sbprintf(&program.out_buffer, "\x1b[%dA", program.last_line_count)
 				}
 
 				// Clear from cursor down and print new output
-				fmt.print("\x1b[J")
-				fmt.print(output)
+				strings.write_string(&program.out_buffer, "\x1b[J")
+				strings.write_string(&program.out_buffer, output)
 
 				// Update line count
 				program.last_line_count = new_line_count
 			} else {
 				// Fullscreen mode - just print
-				fmt.print(output)
+				strings.write_string(&program.out_buffer, output)
 			}
 
-			// Force flush to ensure immediate rendering
-			when ODIN_OS != .Windows {
-				fflush(nil) // flush all streams
-			}
+			term_write(strings.to_string(program.out_buffer))
 
 			// Reset redraw flag and update last frame time
 			needs_redraw = false
 			last_frame_time = frame_start
 		}
 
-		// Sleep to prevent CPU spinning
-		frame_duration := time.diff(frame_start, time.now())
-		if frame_duration < FRAME_TIME {
-			time.sleep(FRAME_TIME - frame_duration)
+		// Sleep to prevent CPU spinning. Wake up at the input poll interval
+		// rather than the frame interval, but never later than the next frame.
+		now := time.now()
+		sleep_for := POLL_TIME
+		if needs_redraw {
+			until_frame := FRAME_TIME - time.diff(last_frame_time, now)
+			if until_frame < sleep_for {
+				sleep_for = until_frame
+			}
+		}
+		if sleep_for > 0 {
+			time.sleep(sleep_for)
 		}
 
-		// Reset temp allocator at end of frame
+		// Reset temp allocator at end of iteration
 		free_all(context.temp_allocator)
 	}
 }
