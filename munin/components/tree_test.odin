@@ -1,6 +1,7 @@
 package components
 
 import munin ".."
+import "core:mem"
 import "core:strings"
 import "core:testing"
 
@@ -222,15 +223,67 @@ test_navigate_stops_at_edges :: proc(t: ^testing.T) {
 
 	// Already at the first visible node
 	up, up_ok := navigate_up(roots, {0})
-	defer delete(up)
 	testing.expect(t, !up_ok, "Cannot move above the first node")
-	testing.expect_value(t, len(up), 1)
-	testing.expect_value(t, up[0], 0)
+	testing.expect_value(t, len(up), 0)
 
 	// Last visible node is "sub" at {0,1}
 	down, down_ok := navigate_down(roots, {0, 1})
-	defer delete(down)
 	testing.expect(t, !down_ok, "Cannot move below the last node")
+	testing.expect_value(t, len(down), 0)
+}
+
+@(test)
+test_navigate_does_not_allocate_when_it_cannot_move :: proc(t: ^testing.T) {
+	// Regression: both procedures used to allocate a copy of the current path
+	// on the no-op path and return it with ok = false, so the idiomatic
+	// `if p, ok := navigate_up(...); ok { }` call site leaked one path per
+	// keypress at the edge of the tree.
+	track: mem.Tracking_Allocator
+	mem.tracking_allocator_init(&track, context.allocator)
+	defer mem.tracking_allocator_destroy(&track)
+	tracked := mem.tracking_allocator(&track)
+
+	roots, nodes := make_fixture()
+	defer destroy_fixture(roots, nodes)
+
+	for _ in 0 ..< 20 {
+		if p, ok := navigate_up(roots, {0}, tracked); ok {
+			delete(p)
+		}
+		if p, ok := navigate_down(roots, {0, 1}, tracked); ok {
+			delete(p)
+		}
+	}
+
+	testing.expectf(
+		t,
+		len(track.allocation_map) == 0,
+		"leaked %d allocations navigating at the edges",
+		len(track.allocation_map),
+	)
+}
+
+@(test)
+test_destroy_visible_nodes_frees_every_path :: proc(t: ^testing.T) {
+	track: mem.Tracking_Allocator
+	mem.tracking_allocator_init(&track, context.allocator)
+	defer mem.tracking_allocator_destroy(&track)
+	tracked := mem.tracking_allocator(&track)
+
+	roots, nodes := make_fixture()
+	defer destroy_fixture(roots, nodes)
+	expand_all(roots[0])
+
+	visible := get_visible_nodes(roots, tracked)
+	testing.expect_value(t, len(visible), 4)
+	destroy_visible_nodes(visible)
+
+	testing.expectf(
+		t,
+		len(track.allocation_map) == 0,
+		"destroy_visible_nodes left %d allocations",
+		len(track.allocation_map),
+	)
 }
 
 @(test)

@@ -358,7 +358,20 @@ Visible_Node :: struct {
 	depth: int,
 }
 
-// Get all visible nodes in traversal order (respecting expanded/collapsed state)
+// Free a slice returned by get_visible_nodes, including the path owned by
+// each entry. Without this the per-entry paths are a loop every caller has to
+// remember to write.
+destroy_visible_nodes :: proc(visible: [dynamic]Visible_Node) {
+	nodes := visible
+	for v in nodes {
+		delete(v.path)
+	}
+	delete(nodes)
+}
+
+// Get all visible nodes in traversal order (respecting expanded/collapsed
+// state). The result and every entry's path are owned by the caller: release
+// them with destroy_visible_nodes().
 get_visible_nodes :: proc(
 	roots: []^Tree_Node,
 	allocator := context.allocator,
@@ -411,19 +424,18 @@ collect_visible_children :: proc(
 	}
 }
 
-// Navigate to next visible node
+// Navigate to the next visible node.
+//
+// Returns nil, false when there is nowhere to go - the caller already holds
+// the current path, and allocating a copy it is about to discard is how the
+// idiomatic `if p, ok := navigate_down(...); ok` call site leaks.
 navigate_down :: proc(
 	roots: []^Tree_Node,
 	current_path: []int,
 	allocator := context.allocator,
 ) -> (new_path: [dynamic]int, ok: bool) {
 	visible := get_visible_nodes(roots, allocator)
-	defer {
-		for v in visible {
-			delete(v.path)
-		}
-		delete(visible)
-	}
+	defer destroy_visible_nodes(visible)
 
 	// Find current position
 	current_idx := -1
@@ -444,27 +456,19 @@ navigate_down :: proc(
 		return new_path, true
 	}
 
-	// Stay at current position
-	new_path = make([dynamic]int, allocator)
-	for p in current_path {
-		append(&new_path, p)
-	}
-	return new_path, false
+	// Nowhere to go: the caller keeps the path it already has.
+	return nil, false
 }
 
-// Navigate to previous visible node
+// Navigate to the previous visible node.
+// Returns nil, false when there is nowhere to go; see navigate_down.
 navigate_up :: proc(
 	roots: []^Tree_Node,
 	current_path: []int,
 	allocator := context.allocator,
 ) -> (new_path: [dynamic]int, ok: bool) {
 	visible := get_visible_nodes(roots, allocator)
-	defer {
-		for v in visible {
-			delete(v.path)
-		}
-		delete(visible)
-	}
+	defer destroy_visible_nodes(visible)
 
 	// Find current position
 	current_idx := -1
@@ -485,12 +489,8 @@ navigate_up :: proc(
 		return new_path, true
 	}
 
-	// Stay at current position
-	new_path = make([dynamic]int, allocator)
-	for p in current_path {
-		append(&new_path, p)
-	}
-	return new_path, false
+	// Nowhere to go: the caller keeps the path it already has.
+	return nil, false
 }
 
 // Helper to compare paths
