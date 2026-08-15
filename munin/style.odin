@@ -143,13 +143,18 @@ style_render :: proc(s: Style, text: string) -> string {
 	// Better approach for `render`: return a string allocated with the context allocator.
 	// For simplicity in this v1, we'll build and return the string.
 
-	lines := strings.split(text, "\n")
-	defer delete(lines)
+	// Scratch allocations go to the temp arena, which the run loop resets each
+	// frame; style_render is called per frame from view functions.
+	lines := strings.split(text, "\n", context.temp_allocator)
 
-	// Calculate content width (max line length using visual width for proper Unicode/ANSI support)
+	// Calculate content width (max line length using visual width for proper
+	// Unicode/ANSI support). Widths are kept so the content loop below does
+	// not have to measure every line a second time.
+	line_widths := make([]int, len(lines), context.temp_allocator)
 	content_width := 0
-	for line in lines {
+	for line, i in lines {
 		visual_width := get_visible_width(line)
+		line_widths[i] = visual_width
 		if visual_width > content_width {
 			content_width = visual_width
 		}
@@ -197,9 +202,9 @@ style_render :: proc(s: Style, text: string) -> string {
 	for i in 0 ..< s.padding[0] {
 		write_margin_left(&b, s)
 		if border, ok := s.border.?; ok {
-			if fg, ok := s.border_fg.?; ok {strings.write_string(&b, color_to_ansi(fg, false))}
+			if fg, ok := s.border_fg.?; ok {write_ansi_color(&b, fg, false)}
 			strings.write_string(&b, border.left)
-			strings.write_string(&b, color_to_ansi(Basic_Color.Reset, false))
+			write_ansi_color(&b, Basic_Color.Reset, false)
 		}
 
 		// Inner width padding
@@ -209,15 +214,15 @@ style_render :: proc(s: Style, text: string) -> string {
 		}
 
 		if border, ok := s.border.?; ok {
-			if fg, ok := s.border_fg.?; ok {strings.write_string(&b, color_to_ansi(fg, false))}
+			if fg, ok := s.border_fg.?; ok {write_ansi_color(&b, fg, false)}
 			strings.write_string(&b, border.right)
-			strings.write_string(&b, color_to_ansi(Basic_Color.Reset, false))
+			write_ansi_color(&b, Basic_Color.Reset, false)
 		}
 		strings.write_string(&b, "\n")
 	}
 
 	// 4. Content
-	for line in lines {
+	for line, line_index in lines {
 		write_margin_left(&b, s)
 
 		// Left Border
@@ -253,7 +258,7 @@ style_render :: proc(s: Style, text: string) -> string {
 		// A full robust implementation would restore previous state, but \x1b[0m is standard.
 
 		// Fill remaining width if any (for fixed width or alignment)
-		remaining := content_width - get_visible_width(line)
+		remaining := content_width - line_widths[line_index]
 		for i in 0 ..< remaining {
 			strings.write_byte(&b, ' ')
 		}
