@@ -4,6 +4,11 @@ set -e
 # Create bin directory if it doesn't exist
 mkdir -p bin
 
+# Optimization level. Odin defaults to -o:minimal, which leaves a lot of
+# per-frame rendering performance on the table. Override with e.g.
+#   ODIN_OPT=-o:none ./examples.sh
+ODIN_OPT="${ODIN_OPT:--o:speed}"
+
 echo "Building examples..."
 
 build_example() {
@@ -16,7 +21,7 @@ build_example() {
     while [ "$attempt" -le "$attempts" ]; do
         local tmp_out="${out}.$$.$attempt.tmp"
 
-        if odin build "$dir" -out:"$tmp_out"; then
+        if odin build "$dir" $ODIN_OPT -out:"$tmp_out"; then
             mv "$tmp_out" "$out"
             return 0
         fi

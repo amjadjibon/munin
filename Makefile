@@ -1,5 +1,7 @@
 .PHONY: all examples games clean test check
 
+ODIN_OPT ?= -o:speed
+
 all: examples
 
 examples:
@@ -7,7 +9,7 @@ examples:
 
 games:
 	mkdir -p bin
-	odin build games/2048 -out:bin/2048
+	odin build games/2048 $(ODIN_OPT) -out:bin/2048
 
 test:
 	odin test munin
