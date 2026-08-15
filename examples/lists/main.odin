@@ -477,5 +477,8 @@ main :: proc() {
 
 	// Create and run program
 	program := munin.make_program(init, update, view)
-	munin.run(&program, input_handler, target_fps = 60)
+	// Cell-diff rendering: the view is painted into a grid and only the cells
+	// that changed are sent. Moving the selection touches two rows, so a
+	// keypress costs a few dozen bytes instead of the whole screen.
+	munin.run(&program, input_handler, target_fps = 60, render_mode = .Cell_Diff)
 }

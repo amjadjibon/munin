@@ -27,6 +27,18 @@ Screen_Mode :: enum {
 	Inline, // Normal inline mode
 }
 
+// How a frame reaches the terminal.
+Render_Mode :: enum {
+	// Write the view exactly as the application composed it. Simple, and what
+	// every munin program has always done.
+	Direct,
+	// Paint the view into a cell buffer and send only the cells that differ
+	// from the previous frame. Costs one grid-sized buffer and a paint pass,
+	// and turns a full-screen retransmit per event into a handful of bytes.
+	// Fullscreen only; Inline mode always renders Direct.
+	Cell_Diff,
+}
+
 // Program represents a TUI application
 Program :: struct($Model, $Msg: typeid) {
 	model:           Model,
@@ -39,6 +51,9 @@ Program :: struct($Model, $Msg: typeid) {
 	buffer:          strings.Builder,
 	out_buffer:      strings.Builder, // Frame assembled here so it can be written in one syscall
 	last_frame:      strings.Builder, // Previous frame, to skip identical redraws
+	screen:          Screen, // Cell buffers, used only by Render_Mode.Cell_Diff
+	prev_screen:     Screen,
+	screen_ready:    bool,
 	allocator:       mem.Allocator,
 	last_line_count: int, // Track number of lines rendered (for inline mode)
 	clear_on_exit:   bool, // Whether to clear screen on exit
@@ -344,6 +359,9 @@ destroy_program :: proc(program: ^Program($Model, $Msg)) {
 	strings.builder_destroy(&program.buffer)
 	strings.builder_destroy(&program.out_buffer)
 	strings.builder_destroy(&program.last_frame)
+	screen_destroy(&program.screen)
+	screen_destroy(&program.prev_screen)
+	program.screen_ready = false
 }
 
 // ============================================================
@@ -397,6 +415,7 @@ run :: proc(
 	initial_mode: Screen_Mode = .Fullscreen,
 	clear_on_exit: bool = true,
 	enable_mouse: bool = false, // Mouse tracking is opt-in to avoid terminal weirdness
+	render_mode: Render_Mode = .Direct,
 ) -> (ok_run: bool) {
 	// Set initial screen mode and clear on exit option
 	program.screen_mode = initial_mode
@@ -548,9 +567,43 @@ run :: proc(
 			// half-updated screen between writes.
 			strings.builder_reset(&program.out_buffer)
 
+			// Cell-diff rendering: paint the view into a grid and send only
+			// the cells that changed. Inline mode keeps its own cursor
+			// bookkeeping, so it always renders directly.
+			use_cells := render_mode == .Cell_Diff && program.screen_mode == .Fullscreen
+
 			// Handle inline mode rendering differently
 			if unchanged {
 				// Skip: nothing to send.
+			} else if use_cells {
+				term_w, term_h, size_ok := get_window_size()
+				if !size_ok || term_w <= 0 || term_h <= 0 {
+					term_w, term_h = 80, 24
+				}
+
+				// A resize invalidates the previous grid: the next diff has
+				// to redraw everything.
+				if screen_resize(&program.screen, term_w, term_h) {
+					screen_resize(&program.prev_screen, term_w, term_h)
+					program.screen_ready = false
+				}
+
+				screen_clear(&program.screen)
+				screen_paint(&program.screen, output)
+
+				if program.screen_ready {
+					screen_render_diff(
+						&program.screen,
+						&program.prev_screen,
+						&program.out_buffer,
+					)
+				} else {
+					screen_render_diff(&program.screen, nil, &program.out_buffer)
+					program.screen_ready = true
+				}
+
+				// Keep this frame as the baseline for the next diff.
+				program.screen, program.prev_screen = program.prev_screen, program.screen
 			} else if program.screen_mode == .Inline {
 				// Count lines in new output
 				new_line_count := count_lines(output)

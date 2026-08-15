@@ -312,5 +312,26 @@ def test_identical_frames_are_not_retransmitted():
         assert app.quit() == 0
 
 
+@e2e
+def test_cell_diff_sends_only_what_changed():
+    # The lists example runs with render_mode = .Cell_Diff: the view is
+    # painted into a cell grid and only changed cells are sent. The same app
+    # rendered directly costs ~930 bytes per keypress.
+    down = "\x1b[B"
+    with App("lists", cols=80, rows=24) as app:
+        app.wait_quiet(idle=0.4)
+
+        base = len(app.output())
+        for _ in range(10):
+            app.send(down)
+            time.sleep(0.05)
+        app.wait_quiet(idle=0.3)
+        per_key = (len(app.output()) - base) / 10
+
+        assert per_key < 300, f"{per_key:.0f} bytes per keypress - diffing regressed"
+
+        assert app.quit() == 0
+
+
 if __name__ == "__main__":
     main()
