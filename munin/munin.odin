@@ -46,6 +46,10 @@ Program :: struct($Model, $Msg: typeid) {
 	screen_mode:     Screen_Mode,
 	init:            proc() -> Model,
 	update:          proc(msg: Msg, model: Model) -> (Model, bool),
+	// Alternative update that receives a command context: it can schedule
+	// messages, repeat them, and quit. When set, it is used instead of
+	// `update`. See cmd.odin.
+	update_cmd:      proc(msg: Msg, model: Model, cmds: ^Cmd_Context(Msg)) -> Model,
 	view:            proc(model: Model, buf: ^strings.Builder),
 	subscriptions:   Maybe(proc(model: Model) -> Maybe(Msg)),
 	buffer:          strings.Builder,
@@ -54,6 +58,7 @@ Program :: struct($Model, $Msg: typeid) {
 	screen:          Screen, // Cell buffers, used only by Render_Mode.Cell_Diff
 	prev_screen:     Screen,
 	screen_ready:    bool,
+	cmds:            Cmd_Context(Msg), // Pending messages and timers
 	allocator:       mem.Allocator,
 	last_line_count: int, // Track number of lines rendered (for inline mode)
 	clear_on_exit:   bool, // Whether to clear screen on exit
@@ -293,6 +298,7 @@ count_lines :: proc(s: string) -> int {
 make_program :: proc {
 	make_program_without_subs,
 	make_program_with_subs,
+	make_program_with_cmds,
 }
 
 // Internal: Create a new program without subscriptions
@@ -362,6 +368,38 @@ destroy_program :: proc(program: ^Program($Model, $Msg)) {
 	screen_destroy(&program.screen)
 	screen_destroy(&program.prev_screen)
 	program.screen_ready = false
+	cmd_destroy(&program.cmds)
+}
+
+// Internal: create a program whose update issues commands.
+//
+// The update signature carries a Cmd_Context instead of returning a quit
+// flag: use cmd_quit() to stop, cmd_after()/cmd_every() to schedule work.
+make_program_with_cmds :: proc(
+	init: proc() -> $Model,
+	update: proc(msg: $Msg, model: Model, cmds: ^Cmd_Context(Msg)) -> Model,
+	view: proc(model: Model, buf: ^strings.Builder),
+	allocator := context.allocator,
+) -> Program(Model, Msg) {
+	buffer :=
+		strings.builder_make_len_cap(0, 4096, allocator) or_else strings.builder_make(allocator)
+	out_buffer :=
+		strings.builder_make_len_cap(0, 4096, allocator) or_else strings.builder_make(allocator)
+	last_frame :=
+		strings.builder_make_len_cap(0, 4096, allocator) or_else strings.builder_make(allocator)
+	return Program(Model, Msg) {
+		model = init(),
+		running = true,
+		screen_mode = .Fullscreen,
+		init = init,
+		update_cmd = update,
+		view = view,
+		subscriptions = nil,
+		buffer = buffer,
+		out_buffer = out_buffer,
+		last_frame = last_frame,
+		allocator = allocator,
+	}
 }
 
 // ============================================================
@@ -506,6 +544,10 @@ run :: proc(
 	MAX_EVENTS_PER_ITERATION :: 256
 	last_frame_time := time.now()
 
+	// Reused each iteration for messages that update posted or timers fired.
+	pending: [dynamic]Msg
+	defer delete(pending)
+
 	// Main loop
 	for program.running {
 		frame_start := time.now()
@@ -513,6 +555,22 @@ run :: proc(
 		// Check for window resize
 		if check_window_resized() {
 			needs_redraw = true
+		}
+
+		// Deliver one message to the application.
+		dispatch :: proc(program: ^Program(Model, Msg), msg: Msg) {
+			if program.update_cmd != nil {
+				program.model = program.update_cmd(msg, program.model, &program.cmds)
+				if program.cmds.quit {
+					program.running = false
+				}
+				return
+			}
+			new_model, should_quit := program.update(msg, program.model)
+			program.model = new_model
+			if should_quit {
+				program.running = false
+			}
 		}
 
 		// Drain all pending input. Handling only one event per iteration
@@ -523,24 +581,40 @@ run :: proc(
 			if !has_msg {
 				break
 			}
-			new_model, should_quit := program.update(msg, program.model)
-			program.model = new_model
+			dispatch(program, msg)
 			needs_redraw = true // Mark for redraw on input
-			if should_quit {
-				program.running = false
+			if !program.running {
 				break
+			}
+		}
+
+		// Messages posted by update, and timers that have come due.
+		if program.running {
+			clear(&pending)
+			cmd_collect_due(&program.cmds, time.now(), &pending)
+
+			for _ in 0 ..< MAX_EVENTS_PER_ITERATION {
+				if len(program.cmds.queue) == 0 {
+					break
+				}
+				append(&pending, ..program.cmds.queue[:])
+				clear(&program.cmds.queue)
+			}
+
+			for msg in pending {
+				dispatch(program, msg)
+				needs_redraw = true
+				if !program.running {
+					break
+				}
 			}
 		}
 
 		// Handle subscriptions (time-based events, etc.)
 		if subs, ok := program.subscriptions.?; ok {
 			if msg, has_msg := subs(program.model).?; has_msg {
-				new_model, should_quit := program.update(msg, program.model)
-				program.model = new_model
+				dispatch(program, msg)
 				needs_redraw = true // Mark for redraw on subscription event
-				if should_quit {
-					program.running = false
-				}
 			}
 		}
 
@@ -642,6 +716,12 @@ run :: proc(
 		// rather than the frame interval, but never later than the next frame.
 		now := time.now()
 		sleep_for := POLL_TIME
+
+		// Never sleep past a scheduled message.
+		if due := cmd_next_due(&program.cmds, now); due >= 0 && due < sleep_for {
+			sleep_for = due
+		}
+
 		if needs_redraw {
 			until_frame := FRAME_TIME - time.diff(last_frame_time, now)
 			if until_frame < sleep_for {

@@ -7,10 +7,6 @@ import "core:mem"
 import "core:strings"
 import "core:time"
 
-// Global variables for cursor blinking timing
-last_blink_time: time.Time
-blink_initialized: bool
-
 // Model holds the application state
 Model :: struct {
 	current_form:   int,
@@ -170,9 +166,8 @@ Msg :: union {
 }
 
 // Update handles state transitions
-update :: proc(msg: Msg, model: Model) -> (Model, bool) {
+update :: proc(msg: Msg, model: Model, cmds: ^munin.Cmd_Context(Msg)) -> Model {
 	new_model := model
-	should_quit := false
 
 	switch m in msg {
 	case SubmitForm:
@@ -239,7 +234,7 @@ update :: proc(msg: Msg, model: Model) -> (Model, bool) {
 		new_model.error_message = ""
 		new_model.show_success = false
 	case Quit:
-		should_quit = true
+		munin.cmd_quit(cmds)
 	case LeftArrow:
 		new_model.current_form = (model.current_form - 1 + 6) % 6
 		new_model.focused_field = 0
@@ -277,26 +272,7 @@ update :: proc(msg: Msg, model: Model) -> (Model, bool) {
 		comp.input_toggle_cursor_blink(new_model.setting_theme)
 	}
 
-	return new_model, should_quit
-}
-
-// Subscription for cursor blinking
-subscriptions :: proc(model: Model) -> Maybe(Msg) {
-	// Check if enough time has passed for cursor blink
-	if !blink_initialized {
-		last_blink_time = time.now()
-		blink_initialized = true
-	}
-
-	current_time := time.now()
-	elapsed_ms := time.diff(last_blink_time, current_time) / time.Millisecond
-
-	if elapsed_ms >= 500 { 	// Blink every 500ms
-		last_blink_time = current_time
-		return BlinkCursor{}
-	}
-
-	return nil
+	return new_model
 }
 
 get_form_message :: proc(form_index: int) -> string {
@@ -1259,8 +1235,13 @@ main :: proc() {
 		}
 	}
 
-	// Create and run program with subscriptions for cursor blinking
-	program := munin.make_program_with_subs(init, update, view, subscriptions)
+	program := munin.make_program(init, update, view)
 	defer destroy_model(&program.model)
+
+	// Blink the cursor twice a second. This used to be a subscription that
+	// ran every frame and compared clocks against a pair of file-scope
+	// globals; the runtime now knows when the next one is due.
+	munin.cmd_every(&program.cmds, 500 * time.Millisecond, Msg(BlinkCursor{}))
+
 	munin.run(&program, input_handler, target_fps = 60)
 }
