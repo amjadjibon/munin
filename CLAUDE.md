@@ -35,6 +35,8 @@ make clean
 ```
 munin/                      # Core framework library
   munin.odin               # Main framework: Program struct, run loop, rendering
+  cmd.odin                 # Commands: scheduled/repeating messages, quit
+  screen.odin              # Cell buffer: painting, clipping, composition, diffing
   input.odin               # Input types and public API (Key_Event, Mouse_Event)
   input_posix.odin         # POSIX input handling (read_key, read_input)
   input_windows.odin       # Windows input handling
@@ -61,13 +63,55 @@ docs/                      # Component documentation (per-component .md files)
 
 ## Architecture
 
-The framework follows the **Elm Architecture** with three core concepts:
+The framework follows the **Elm Architecture**:
 
 1. **Model** - Application state (user-defined struct)
-2. **Update** - Pure function: `proc(msg: Msg, model: Model) -> (Model, bool)` that transforms state
+2. **Update** - Pure function that transforms state, in one of two forms:
+   - `proc(msg: Msg, model: Model) -> (Model, bool)` - the bool requests quit
+   - `proc(msg: Msg, model: Model, cmds: ^Cmd_Context(Msg)) -> Model` - can also
+     schedule work (see Commands below)
 3. **View** - Pure function: `proc(model: Model, buf: ^strings.Builder)` that renders to terminal
 
-Programs are created with `make_program(init, update, view)` and run with `run(&program, input_handler)`.
+Programs are created with `make_program(init, update, view)` - which picks the
+constructor from the update signature - and run with `run(&program, input_handler)`.
+
+### Commands (`cmd.odin`)
+
+An update that takes a `^Cmd_Context(Msg)` can express effects instead of
+keeping timing state in globals:
+
+- `cmd_send(cmds, msg)` - deliver a message on the next iteration
+- `cmd_after(cmds, delay, msg)` / `cmd_every(cmds, interval, msg)` - schedule
+  one or repeating, returning a handle for `cmd_cancel`
+- `cmd_quit(cmds)` - stop the program
+
+The run loop fires due timers alongside input and never sleeps past the next
+scheduled message. `examples/forms` uses `cmd_every` for its cursor blink.
+
+### Rendering modes
+
+`run(..., render_mode: .Direct | .Cell_Diff)`.
+
+- `.Direct` (default) writes the view exactly as composed.
+- `.Cell_Diff` paints the view into a `Screen` (cell grid) and sends only the
+  cells that changed - roughly 90% fewer bytes per keypress on a full-screen
+  app. Fullscreen only; Inline always renders directly. `examples/lists` uses it.
+
+### Two rendering styles, and how they compose
+
+Components come in two shapes, and mixing them is the framework's main sharp
+edge:
+
+- **Positioned** (`draw_table`, `draw_list`, `draw_box*`, `draw_input`,
+  `draw_tree`) emit absolute cursor moves. They cannot be measured, padded or
+  joined - `style_render` sees them as one zero-width line.
+- **Flowed** (`style_render`, `join_horizontal`, `join_vertical`,
+  `render_tree`) produce newline-separated text that composes.
+
+To place positioned components relative to each other, paint them into a
+`Screen` with an origin and clip size (`screen_paint`), or compose grids with
+`screen_blit`. That is also what gives them clipping - drawing past the edge is
+dropped instead of corrupting the display.
 
 Platform-specific code is separated into `*_posix.odin` and `*_windows.odin` files using Odin's conditional compilation (`when ODIN_OS != .Windows`).
 
