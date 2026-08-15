@@ -18,6 +18,10 @@ when ODIN_OS != .Windows {
 	SQLITE_ROW :: 100
 	SQLITE_DONE :: 101
 
+	// Tells SQLite to copy the bound text; the Odin-side string may be in the
+	// temp arena and gone by the time the statement runs.
+	SQLITE_TRANSIENT := rawptr(~uintptr(0))
+
 	@(default_calling_convention = "c")
 	foreign sqlite {
 		sqlite3_open :: proc(filename: cstring, ppDb: ^^sqlite3) -> c.int ---
@@ -37,6 +41,13 @@ when ODIN_OS != .Windows {
 			nByte: c.int,
 			ppStmt: ^^sqlite3_stmt,
 			pzTail: ^cstring,
+		) -> c.int ---
+		sqlite3_bind_text :: proc(
+			stmt: ^sqlite3_stmt,
+			index: c.int,
+			text: cstring,
+			nByte: c.int,
+			destructor: rawptr,
 		) -> c.int ---
 		sqlite3_step :: proc(stmt: ^sqlite3_stmt) -> c.int ---
 		sqlite3_finalize :: proc(stmt: ^sqlite3_stmt) -> c.int ---
@@ -280,12 +291,30 @@ load_selected_table :: proc(model: ^Model) {
 	}
 
 	table := model.tables[model.selected_table]
-	query := fmt.tprintf("select * from \"%s\" limit 200", table)
+	query := fmt.tprintf("select * from %s limit 200", quote_identifier(table))
 	set_query_text(model.query, query)
 	model.result = run_select(model.db, query, 200)
 	model.page = 0
 	load_schema(model, table)
 	set_status(model, fmt.tprintf("Loaded %s (%d rows)", table, len(model.result.rows)))
+}
+
+// SQLite identifiers cannot be bound as parameters, so they have to be quoted:
+// wrap in double quotes and double any double quote inside. Without this a
+// table named `x" ...` ends the identifier early and the rest of the name is
+// executed as SQL.
+quote_identifier :: proc(name: string, allocator := context.temp_allocator) -> string {
+	b := strings.builder_make(allocator)
+	strings.write_byte(&b, '"')
+	for i in 0 ..< len(name) {
+		if name[i] == '"' {
+			strings.write_string(&b, "\"\"")
+		} else {
+			strings.write_byte(&b, name[i])
+		}
+	}
+	strings.write_byte(&b, '"')
+	return strings.to_string(b)
 }
 
 load_schema :: proc(model: ^Model, table: string) {
@@ -294,8 +323,12 @@ load_schema :: proc(model: ^Model, table: string) {
 		model.schema = ""
 	}
 
-	query := fmt.tprintf("select sql from sqlite_schema where name = '%s' limit 1", table)
-	result := run_select(model.db, query, 1)
+	result := run_select(
+		model.db,
+		"select sql from sqlite_schema where name = ? limit 1",
+		1,
+		{table},
+	)
 	defer clear_result(&result)
 
 	if len(result.rows) > 0 && len(result.rows[0]) > 0 {
@@ -335,7 +368,15 @@ run_current_query :: proc(model: ^Model) {
 	set_status(model, fmt.tprintf("Query returned %d rows", len(model.result.rows)))
 }
 
-run_select :: proc(db: ^sqlite3, sql: string, max_rows: int) -> Query_Result {
+// Values must be passed as bound parameters, never interpolated into the SQL
+// text: a table name is data too, and SQLite happily accepts identifiers
+// containing quotes.
+run_select :: proc(
+	db: ^sqlite3,
+	sql: string,
+	max_rows: int,
+	params: []string = nil,
+) -> Query_Result {
 	result := Query_Result {
 		columns = make([dynamic]string),
 		rows = make([dynamic][dynamic]string),
@@ -353,6 +394,18 @@ run_select :: proc(db: ^sqlite3, sql: string, max_rows: int) -> Query_Result {
 		return result
 	}
 	defer sqlite3_finalize(stmt)
+
+	for value, i in params {
+		value_c, value_err := strings.clone_to_cstring(value, context.temp_allocator)
+		if value_err != nil {
+			result.error = strings.clone("Failed to allocate parameter text")
+			return result
+		}
+		if sqlite3_bind_text(stmt, c.int(i + 1), value_c, -1, SQLITE_TRANSIENT) != SQLITE_OK {
+			result.error = db_error(db)
+			return result
+		}
+	}
 
 	col_count := int(sqlite3_column_count(stmt))
 	for i in 0 ..< col_count {
