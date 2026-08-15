@@ -167,9 +167,22 @@ input_is_valid_phone :: proc(state: ^Input_State) -> bool {
 	return true
 }
 
-// Get current input text
+// Get current input text.
+//
+// The result is a *view* into the input's own buffer, not a copy: it stays
+// valid only until the next edit. input_clear(), input_add_char(),
+// input_backspace() and friends rewrite those same bytes, so a string kept
+// across an edit silently changes content (and a growing buffer may move it
+// entirely). Use input_clone_text() for anything you intend to store.
 input_get_text :: proc(state: ^Input_State) -> string {
 	return string(state.buffer[:])
+}
+
+// Get a copy of the current input text, owned by the caller.
+// Use this whenever the text outlives the next edit - storing it in a model,
+// pushing it into a history, returning it from a form.
+input_clone_text :: proc(state: ^Input_State, allocator := context.allocator) -> string {
+	return strings.clone(string(state.buffer[:]), allocator)
 }
 
 // Clear input

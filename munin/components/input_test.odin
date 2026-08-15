@@ -157,3 +157,44 @@ test_draw_input_multibyte_cursor :: proc(t: ^testing.T) {
 	// one byte at a time.
 	testing.expect(t, strings.contains(strings.to_string(buf), "你好"), "Should render intact text")
 }
+
+@(test)
+test_input_get_text_returns_a_view_not_a_copy :: proc(t: ^testing.T) {
+	// Pins the documented contract: the result aliases the input's buffer, so
+	// it is only valid until the next edit. Storing it across one is the bug
+	// that put aliased messages into the forms example's chat history.
+	state := make_input_state(32, "")
+	defer destroy_input_state(&state)
+
+	for r in "hello" {
+		input_add_char(&state, r)
+	}
+	borrowed := input_get_text(&state)
+	testing.expect_value(t, borrowed, "hello")
+
+	input_clear(&state)
+	for r in "world" {
+		input_add_char(&state, r)
+	}
+
+	testing.expect_value(t, borrowed, "world") // same bytes, new content
+}
+
+@(test)
+test_input_clone_text_survives_later_edits :: proc(t: ^testing.T) {
+	state := make_input_state(32, "")
+	defer destroy_input_state(&state)
+
+	for r in "hello" {
+		input_add_char(&state, r)
+	}
+	owned := input_clone_text(&state)
+	defer delete(owned)
+
+	input_clear(&state)
+	for r in "world" {
+		input_add_char(&state, r)
+	}
+
+	testing.expect_value(t, owned, "hello")
+}
