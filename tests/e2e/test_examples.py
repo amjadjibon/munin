@@ -10,6 +10,7 @@ import re
 import signal
 import time
 
+import harness
 from harness import App, e2e, main
 
 # ============================================================
@@ -319,6 +320,10 @@ def test_cell_diff_sends_only_what_changed():
     # rendered directly costs ~930 bytes per keypress.
     down = "\x1b[B"
     with App("lists", cols=80, rows=24) as app:
+        # Wait for real content before taking the baseline: on a loaded
+        # machine wait_quiet alone can return before the first frame is drawn,
+        # and that full frame then counts against the keypresses.
+        app.wait_for("BULLET LIST")
         app.wait_quiet(idle=0.4)
 
         base = len(app.output())
@@ -329,6 +334,104 @@ def test_cell_diff_sends_only_what_changed():
         per_key = (len(app.output()) - base) / 10
 
         assert per_key < 300, f"{per_key:.0f} bytes per keypress - diffing regressed"
+
+        assert app.quit() == 0
+
+
+# ============================================================
+# EXAMPLES FOR THE NEWER SUBSYSTEMS
+# ============================================================
+
+
+@e2e
+def test_commands_example_schedules_and_cancels():
+    with App("commands", cols=90, rows=24) as app:
+        app.wait_for("Commands")
+
+        # cmd_every: the clock advances on its own.
+        app.wait_for("001 seconds elapsed", timeout=3.0)
+
+        # cmd_after chained through several steps, plus cmd_send for the toast.
+        app.send(" ")
+        app.wait_for("done.", timeout=4.0)
+        app.wait_for("pipeline finished", timeout=2.0)
+
+        # cmd_cancel stops the repeating message.
+        app.send("p")
+        app.wait_quiet(idle=0.3)
+        paused = re.search(r"(\d+) seconds elapsed", app.screen().text()).group(1)
+
+        time.sleep(2.5)
+        still = re.search(r"(\d+) seconds elapsed", app.screen().text()).group(1)
+        assert still == paused, f"clock kept running after cancel: {paused} -> {still}"
+
+        assert app.quit() == 0
+
+
+@e2e
+def test_screen_example_composes_and_clips():
+    with App("screen", cols=100, rows=26) as app:
+        app.wait_for("Cell buffer")
+        app.wait_quiet(idle=0.3)
+
+        # This app renders with Cell_Diff, so the byte stream carries only
+        # changed cells - what matters is the resulting display.
+        wide = app.screen()
+        assert "positioned component" in wide.text()
+        assert "alpha" in wide.text()  # the table
+        assert "composition" in wide.text()  # the list
+
+        # Side by side on the same rows, not stacked or overwriting.
+        row = next(r for r in (wide.row(y) for y in range(wide.rows)) if "alpha" in r)
+        assert "drawn at" in row, f"panels are not side by side: {row!r}"
+
+        # The panel row itself, not the header prose that mentions the words.
+        panel_before = next(
+            wide.row(y) for y in range(4, wide.rows) if "positioned" in wide.row(y)
+        )
+
+        # Narrowing the regions clips the contents instead of letting them
+        # overflow into the neighbouring panel.
+        for _ in range(8):
+            app.send("<")
+            time.sleep(0.05)
+        app.wait_quiet(idle=0.3)
+        after = app.screen()
+        panel_after = next(after.row(y) for y in range(4, after.rows) if "position" in after.row(y))
+
+        assert "positioned component" in panel_before, "panel starts unclipped"
+        assert "positioned component" not in panel_after, "panel content should be clipped"
+        assert "position" in panel_after, "clipped, not dropped"
+        assert "alpha" not in panel_after and "alph" in after.text(), "neighbour clipped too"
+
+        assert app.quit() == 0
+
+
+@e2e
+def test_untrusted_example_blocks_escape_sequences():
+    payloads = [
+        b"\x1b[2J",  # erase display
+        b"\x1b[12;40H",  # cursor jump
+        b"\x1b[41m",  # background bleed
+        b"\x1b]0;pwned",  # window title
+        b"\x1b[2K",  # erase line
+    ]
+    with App("untrusted", cols=100, rows=26) as app:
+        app.wait_for("Untrusted text")
+        app.wait_quiet(idle=0.3)
+
+        clean = app.output()
+        for p in payloads:
+            assert p not in clean, f"{p!r} reached the terminal while sanitizing"
+
+        # Turning it off is what makes the point: the same data now drives the
+        # terminal.
+        base = len(app.output())
+        app.send("s")
+        app.wait_quiet(idle=0.4)
+        raw = app.output()[base:]
+        for p in payloads:
+            assert p in raw, f"{p!r} should reach the terminal with sanitizing off"
 
         assert app.quit() == 0
 

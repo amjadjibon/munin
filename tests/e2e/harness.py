@@ -39,6 +39,129 @@ def strip_ansi(data: bytes) -> str:
     return ANSI_RE.sub(b"", data).decode("utf-8", errors="replace")
 
 
+def _cell_width(ch: str) -> int:
+    """Terminal cells a character occupies (mirrors munin's width table)."""
+    o = ord(ch)
+    if o < 0x1100:
+        return 1
+    wide = (
+        (0x1100, 0x115F), (0x2329, 0x232A), (0x2E80, 0x303F), (0x3040, 0xA4CF),
+        (0xAC00, 0xD7A3), (0xF900, 0xFAFF), (0xFE10, 0xFE19), (0xFE30, 0xFE6F),
+        (0xFF00, 0xFF60), (0xFFE0, 0xFFE6), (0x1F300, 0x1F64F), (0x1F680, 0x1F6FF),
+        (0x1F900, 0x1F9FF), (0x1FA70, 0x1FAFF), (0x20000, 0x2FFFF),
+    )
+    return 2 if any(lo <= o <= hi for lo, hi in wide) else 1
+
+
+CSI_RE = re.compile(r"\x1b\[([0-9;?]*)([ -/]*)([@-~])")
+
+
+class Screen:
+    """What the user would actually be looking at.
+
+    Replays a captured byte stream - cursor moves, erases, text - into a grid.
+    Necessary for any app rendering with Render_Mode.Cell_Diff, where the
+    stream carries only the cells that changed and never contains a whole
+    frame after the first.
+    """
+
+    def __init__(self, cols=80, rows=24):
+        self.cols, self.rows = cols, rows
+        self.grid = [[" "] * cols for _ in range(rows)]
+        self.x = self.y = 0
+
+    def _put(self, ch):
+        w = _cell_width(ch)
+        if 0 <= self.y < self.rows and 0 <= self.x < self.cols:
+            self.grid[self.y][self.x] = ch
+            if w == 2 and self.x + 1 < self.cols:
+                self.grid[self.y][self.x + 1] = ""
+        self.x += w
+
+    def _erase(self, x0, x1, y0, y1):
+        for y in range(max(y0, 0), min(y1, self.rows)):
+            for x in range(max(x0, 0), min(x1, self.cols)):
+                self.grid[y][x] = " "
+
+    def feed(self, data: bytes):
+        text = data.decode("utf-8", errors="replace")
+        i = 0
+        while i < len(text):
+            ch = text[i]
+
+            if ch == "\x1b":
+                m = CSI_RE.match(text, i)
+                if not m:
+                    # OSC/DCS and friends: skip to the terminator.
+                    end = text.find("\x07", i)
+                    esc = text.find("\x1b\\", i)
+                    if esc != -1 and (end == -1 or esc < end):
+                        i = esc + 2
+                    elif end != -1:
+                        i = end + 1
+                    else:
+                        i += 2
+                    continue
+
+                params, final = m.group(1), m.group(3)
+                i = m.end()
+                if params.startswith("?"):
+                    continue  # private modes do not touch the grid
+
+                nums = [int(p) if p.isdigit() else 0 for p in params.split(";")] if params else []
+                n = nums[0] if nums else 0
+
+                if final in "Hf":
+                    self.y = (nums[0] - 1) if len(nums) > 0 and nums[0] else 0
+                    self.x = (nums[1] - 1) if len(nums) > 1 and nums[1] else 0
+                elif final == "A":
+                    self.y -= max(n, 1)
+                elif final == "B":
+                    self.y += max(n, 1)
+                elif final == "C":
+                    self.x += max(n, 1)
+                elif final == "D":
+                    self.x -= max(n, 1)
+                elif final == "G":
+                    self.x = max(n, 1) - 1
+                elif final == "J":
+                    if n == 0:
+                        self._erase(self.x, self.cols, self.y, self.y + 1)
+                        self._erase(0, self.cols, self.y + 1, self.rows)
+                    elif n == 1:
+                        self._erase(0, self.cols, 0, self.y)
+                        self._erase(0, self.x + 1, self.y, self.y + 1)
+                    else:
+                        self._erase(0, self.cols, 0, self.rows)
+                elif final == "K":
+                    if n == 0:
+                        self._erase(self.x, self.cols, self.y, self.y + 1)
+                    elif n == 1:
+                        self._erase(0, self.x + 1, self.y, self.y + 1)
+                    else:
+                        self._erase(0, self.cols, self.y, self.y + 1)
+                continue
+
+            i += 1
+            if ch == "\n":
+                self.y += 1
+                self.x = 0
+            elif ch == "\r":
+                self.x = 0
+            elif ch == "\t":
+                self.x = ((self.x // 8) + 1) * 8
+            elif ch >= " ":
+                self._put(ch)
+
+    def row(self, y: int) -> str:
+        if not 0 <= y < self.rows:
+            return ""
+        return "".join(self.grid[y]).rstrip()
+
+    def text(self) -> str:
+        return "\n".join(self.row(y) for y in range(self.rows))
+
+
 class Timeout(Exception):
     pass
 
@@ -48,6 +171,7 @@ class App:
 
     def __init__(self, name, cols=80, rows=24, args=None):
         self.name = name
+        self.cols, self.rows = cols, rows
         self.path = os.path.join(BIN_DIR, name)
         if not os.path.exists(self.path):
             raise FileNotFoundError(
@@ -103,6 +227,15 @@ class App:
 
     def text(self) -> str:
         return strip_ansi(self.output())
+
+    def screen(self) -> Screen:
+        """Replay everything written so far into a grid.
+
+        Use this instead of text() whenever what matters is the final display
+        rather than the bytes - always, for a Cell_Diff app."""
+        s = Screen(self.cols, self.rows)
+        s.feed(self.output())
+        return s
 
     def send(self, data):
         if isinstance(data, str):
