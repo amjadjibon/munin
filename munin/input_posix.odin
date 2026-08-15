@@ -6,12 +6,26 @@ import "core:unicode/utf8"
 
 when ODIN_OS != .Windows {
 
+	// NOTE: The input buffer below is package-level global state, so input
+	// handling is single-threaded: read_input/read_key must only be called
+	// from the thread running the program loop.
 	@(private)
 	input_buffer: [1024]byte
 	@(private)
 	input_buffer_len: int
 	@(private)
 	last_input_time: time.Time
+
+	// Longest escape sequence we are willing to buffer before deciding the
+	// stream is garbage and resynchronising.
+	@(private)
+	MAX_ESCAPE_SEQ_LEN :: 64
+
+	// Upper bound for a numeric field in an escape sequence. Terminals never
+	// legitimately exceed this, and it keeps parsed coordinates in a range
+	// that cannot blow up an application's array indexing.
+	@(private)
+	MAX_SEQ_NUMBER :: 9999
 
 	// Helper: Parse a single event from a buffer
 	// Returns: event, consumed_bytes, success
@@ -35,116 +49,98 @@ when ODIN_OS != .Windows {
 		return (b & 0xC0) == 0x80
 	}
 
-	parse_event_from_buffer :: proc(buf: []byte) -> (Input_Event, int, bool) {
+	// Parse a decimal field, rejecting anything that is not a run of digits.
+	// Without this an attacker-controlled (or simply corrupt) sequence turns
+	// into arbitrary integers via `b - '0'` on non-digit bytes.
+	@(private)
+	parse_seq_number :: proc(s: []byte) -> (int, bool) {
+		if len(s) == 0 || len(s) > 5 {
+			return 0, false
+		}
+		v := 0
+		for b in s {
+			if b < '0' || b > '9' {
+				return 0, false
+			}
+			v = v * 10 + int(b - '0')
+			if v > MAX_SEQ_NUMBER {
+				return 0, false
+			}
+		}
+		return v, true
+	}
+
+	// Decode the xterm modifier parameter (1 + bitmask) used by sequences
+	// like ESC [ 1 ; 5 A (Ctrl+Up).
+	@(private)
+	apply_modifier :: proc(ev: ^Key_Event, modifier: int) {
+		if modifier <= 1 {
+			return
+		}
+		bits := modifier - 1
+		ev.shift = (bits & 1) != 0
+		ev.alt = (bits & 2) != 0
+		ev.ctrl = (bits & 4) != 0
+	}
+
+	// Split a CSI parameter string into its first numeric parameter and its
+	// trailing modifier parameter, e.g. "1;5" -> (1, 5).
+	@(private)
+	split_csi_params :: proc(params: []byte) -> (first: int, modifier: int, ok: bool) {
+		if len(params) == 0 {
+			return 0, 1, true
+		}
+
+		semi := -1
+		for i in 0 ..< len(params) {
+			if params[i] == ';' {
+				semi = i
+				break
+			}
+		}
+
+		if semi == -1 {
+			first = parse_seq_number(params) or_return
+			return first, 1, true
+		}
+
+		first = parse_seq_number(params[:semi]) or_return
+		modifier = parse_seq_number(params[semi + 1:]) or_return
+		return first, modifier, true
+	}
+
+	// Parse a plain character or control byte (no escape prefix).
+	@(private)
+	parse_char_event :: proc(buf: []byte) -> (Key_Event, int, bool) {
 		if len(buf) == 0 {
-			return nil, 0, false
+			return {}, 0, false
 		}
 
-		// Handle Escape Sequences
-		if buf[0] == 0x1b {
-			// Just ESC?
-			if len(buf) == 1 {
-				// We can't know if it's just ESC or start of sequence without waiting.
-				return nil, 0, false
-			}
-
-			if buf[1] == '[' {
-				if len(buf) < 3 {
-					return nil, 0, false
-				}
-
-				// Mouse SGR: ESC [ < ...
-				if buf[2] == '<' {
-					// We need to find the 'm' or 'M' terminator
-					end_idx := -1
-					for i in 3 ..< len(buf) {
-						if buf[i] == 'm' || buf[i] == 'M' {
-							end_idx = i
-							break
-						}
-					}
-					if end_idx == -1 {
-						// Incomplete mouse sequence
-						return nil, 0, false
-					}
-
-					// Apply limit check for sanity (e.g. max mouse seq length ~32)
-					if end_idx > 32 {
-						// Garbage or too long, consume 1 byte (ESC) and retry
-						return nil, 1, false // Actually we should fail this invalid sequence
-					}
-
-					// Parse using existing helper (adapted)
-					if mouse, ok := parse_sgr_mouse(buf[:end_idx + 1], end_idx + 1).?; ok {
-						return mouse, end_idx + 1, true
-					} else {
-						// Failed to parse, consume ESC
-						// Or consume whole sequence as garbage?
-						// Safer to consume ESC
-						return Key_Event{key = .Escape}, 1, true
-					}
-				}
-
-				// Regular CSI sequences
-
-				// Arrow keys: ESC [ A/B/C/D
-				switch buf[2] {
-				case 'A':
-					return Key_Event{key = .Up}, 3, true
-				case 'B':
-					return Key_Event{key = .Down}, 3, true
-				case 'C':
-					return Key_Event{key = .Right}, 3, true
-				case 'D':
-					return Key_Event{key = .Left}, 3, true
-				case 'Z':
-					return Key_Event{key = .Tab, shift = true}, 3, true // Shift+Tab
-				}
-
-				// Page Up/Down: ESC [ 5 ~ / ESC [ 6 ~
-				if len(buf) >= 4 {
-					if buf[2] == '5' && buf[3] == '~' {
-						return Key_Event{key = .PageUp}, 4, true
-					}
-					if buf[2] == '6' && buf[3] == '~' {
-						return Key_Event{key = .PageDown}, 4, true
-					}
-				} else {
-					// Might be incomplete 5~
-					if buf[2] == '5' || buf[2] == '6' {
-						return nil, 0, false
-					}
-				}
-
-				// Unknown CSI
-				return Key_Event{key = .Escape}, 1, true
-			}
-
-			// ESC followed by something else (e.g. Meta/Alt key)
-			// For now, treat as ESC
-			return Key_Event{key = .Escape}, 1, true
-		}
-
-		// Regular characters
-		// Handle Control characters
 		switch buf[0] {
 		case 13, 10:
 			return Key_Event{key = .Enter}, 1, true
-		case 127:
+		case 127, 8:
 			return Key_Event{key = .Backspace}, 1, true
 		case 9:
 			return Key_Event{key = .Tab}, 1, true
-		case 3:
-			return Key_Event{key = .Char, char = 'c', ctrl = true}, 1, true // Ctrl+C (often trapped by signal, but if raw)
 		}
 
-		// Default char
+		// Ctrl+A .. Ctrl+Z (minus the ones handled above).
+		if buf[0] >= 1 && buf[0] <= 26 {
+			return Key_Event{key = .Char, char = rune('a' + buf[0] - 1), ctrl = true}, 1, true
+		}
+
+		// Remaining C0 controls have no useful mapping.
+		if buf[0] < 0x20 {
+			return Key_Event{key = .Unknown}, 1, true
+		}
+
 		size := utf8_sequence_size(buf[0])
 		if size == 0 {
 			return Key_Event{key = .Char, char = utf8.RUNE_ERROR}, 1, true
 		}
 		if len(buf) < size {
-			return nil, 0, false
+			return {}, 0, false
 		}
 		for i in 1 ..< size {
 			if !is_utf8_continuation(buf[i]) {
@@ -156,13 +152,144 @@ when ODIN_OS != .Windows {
 		if r == utf8.RUNE_ERROR || decoded_size != size {
 			return Key_Event{key = .Char, char = utf8.RUNE_ERROR}, 1, true
 		}
-		return Key_Event{key = .Char, char = r, shift = false}, size, true
+		return Key_Event{key = .Char, char = r}, size, true
+	}
+
+	// Parse a CSI sequence (ESC [ ... final).
+	// Per ECMA-48 a CSI is: parameter bytes 0x30-0x3F, intermediate bytes
+	// 0x20-0x2F, then a single final byte 0x40-0x7E. Consuming the whole
+	// sequence matters: bailing out after the ESC leaves the remainder of the
+	// sequence in the stream, where it is delivered to the application as
+	// literal keystrokes.
+	@(private)
+	parse_csi :: proc(buf: []byte) -> (Input_Event, int, bool) {
+		i := 2
+		for i < len(buf) {
+			b := buf[i]
+			if b >= 0x40 && b <= 0x7E {
+				break
+			}
+			if b < 0x20 || b > 0x3F {
+				// Not a valid CSI body byte: drop "ESC [" and resynchronise.
+				return Key_Event{key = .Unknown}, 2, true
+			}
+			i += 1
+		}
+
+		if i >= len(buf) {
+			// Incomplete, unless it has grown implausibly long.
+			if len(buf) >= MAX_ESCAPE_SEQ_LEN {
+				return Key_Event{key = .Unknown}, 2, true
+			}
+			return nil, 0, false
+		}
+
+		final := buf[i]
+		params := buf[2:i]
+		total := i + 1
+
+		// SGR mouse: ESC [ < Cb ; Cx ; Cy M/m
+		if len(params) > 0 && params[0] == '<' && (final == 'M' || final == 'm') {
+			if mouse, ok := parse_sgr_mouse(buf[:total], total).?; ok {
+				return mouse, total, true
+			}
+			return Key_Event{key = .Unknown}, total, true
+		}
+
+		first, modifier, ok := split_csi_params(params)
+		if !ok {
+			return Key_Event{key = .Unknown}, total, true
+		}
+
+		ev: Key_Event
+		switch final {
+		case 'A':
+			ev = Key_Event{key = .Up}
+		case 'B':
+			ev = Key_Event{key = .Down}
+		case 'C':
+			ev = Key_Event{key = .Right}
+		case 'D':
+			ev = Key_Event{key = .Left}
+		case 'Z':
+			return Key_Event{key = .Tab, shift = true}, total, true
+		case '~':
+			switch first {
+			case 5:
+				ev = Key_Event{key = .PageUp}
+			case 6:
+				ev = Key_Event{key = .PageDown}
+			case:
+				return Key_Event{key = .Unknown}, total, true
+			}
+		case:
+			return Key_Event{key = .Unknown}, total, true
+		}
+
+		apply_modifier(&ev, modifier)
+		return ev, total, true
+	}
+
+	// Parse an SS3 sequence (ESC O final) - arrows in application cursor mode.
+	@(private)
+	parse_ss3 :: proc(buf: []byte) -> (Input_Event, int, bool) {
+		if len(buf) < 3 {
+			return nil, 0, false
+		}
+		switch buf[2] {
+		case 'A':
+			return Key_Event{key = .Up}, 3, true
+		case 'B':
+			return Key_Event{key = .Down}, 3, true
+		case 'C':
+			return Key_Event{key = .Right}, 3, true
+		case 'D':
+			return Key_Event{key = .Left}, 3, true
+		}
+		return Key_Event{key = .Unknown}, 3, true
+	}
+
+	parse_event_from_buffer :: proc(buf: []byte) -> (Input_Event, int, bool) {
+		if len(buf) == 0 {
+			return nil, 0, false
+		}
+
+		// Handle Escape Sequences
+		if buf[0] == 0x1b {
+			// Just ESC? We cannot tell a bare Escape key from the start of a
+			// sequence without waiting; read_input resolves it on timeout.
+			if len(buf) == 1 {
+				return nil, 0, false
+			}
+
+			switch buf[1] {
+			case '[':
+				return parse_csi(buf)
+			case 'O':
+				return parse_ss3(buf)
+			}
+
+			// ESC followed by a key is Alt+key.
+			ev, consumed, ok := parse_char_event(buf[1:])
+			if !ok {
+				if len(buf) >= MAX_ESCAPE_SEQ_LEN {
+					return Key_Event{key = .Escape}, 1, true
+				}
+				return nil, 0, false
+			}
+			ev.alt = true
+			return ev, consumed + 1, true
+		}
+
+		return parse_char_event(buf)
 	}
 
 	// Parse SGR mouse event (format: ESC [ < Cb ; Cx ; Cy M/m)
-	// This is the preferred format with better coordinate support
+	// This is the preferred format with better coordinate support.
+	// Every numeric field is validated; a malformed sequence is rejected
+	// rather than turned into a garbage coordinate.
 	parse_sgr_mouse :: proc(buf: []byte, n: int) -> Maybe(Mouse_Event) {
-		if n < 9 || buf[0] != 27 || buf[1] != '[' || buf[2] != '<' {
+		if n < 9 || n > len(buf) || buf[0] != 27 || buf[1] != '[' || buf[2] != '<' {
 			return nil
 		}
 
@@ -184,23 +311,21 @@ when ODIN_OS != .Windows {
 		if semi1 == -1 || semi2 == -1 || end == -1 {
 			return nil
 		}
-
-		// Parse Cb (button + modifiers)
-		cb := 0
-		for i in 3 ..< semi1 {
-			cb = cb * 10 + int(buf[i] - '0')
+		if !(semi1 < semi2 && semi2 < end) {
+			return nil
 		}
 
-		// Parse Cx (x coordinate, 1-based)
-		cx := 0
-		for i in (semi1 + 1) ..< semi2 {
-			cx = cx * 10 + int(buf[i] - '0')
+		cb, cb_ok := parse_seq_number(buf[3:semi1])
+		if !cb_ok {
+			return nil
 		}
-
-		// Parse Cy (y coordinate, 1-based)
-		cy := 0
-		for i in (semi2 + 1) ..< end {
-			cy = cy * 10 + int(buf[i] - '0')
+		cx, cx_ok := parse_seq_number(buf[semi1 + 1:semi2])
+		if !cx_ok {
+			return nil
+		}
+		cy, cy_ok := parse_seq_number(buf[semi2 + 1:end])
+		if !cy_ok {
+			return nil
 		}
 
 		// Determine event type (M = press, m = release)
@@ -247,11 +372,13 @@ when ODIN_OS != .Windows {
 			}
 		}
 
+		// Coordinates are 1-based in the protocol. A zero field would map to
+		// -1, so clamp at the origin.
 		return Mouse_Event {
 			button = button,
 			type   = event_type,
-			x      = cx - 1, // Convert to 0-based
-			y      = cy - 1,
+			x      = max(cx - 1, 0),
+			y      = max(cy - 1, 0),
 			shift  = shift,
 			ctrl   = ctrl,
 			alt    = alt,
@@ -280,31 +407,35 @@ when ODIN_OS != .Windows {
 		// 2. Parse event
 		event, consumed, ok := parse_event_from_buffer(input_buffer[:input_buffer_len])
 
-		if ok {
+		if ok && consumed > 0 {
 			// Shift remaining buffer
 			copy(input_buffer[:], input_buffer[consumed:input_buffer_len])
 			input_buffer_len -= consumed
 			return event
-		} else {
-			// Incomplete sequence or waiting for more data
-			// Check for timeout waiting for more data (e.g. for ambiguous ESC key)
-			if time.diff(last_input_time, time.now()) > 50 * time.Millisecond {
-				// Timeout occurred. Force consume the first byte.
-				// If it's ESC, it's just an Escape key.
-				b := input_buffer[0]
-				// Shift remaining buffer
-				copy(input_buffer[:], input_buffer[1:input_buffer_len])
-				input_buffer_len -= 1
+		}
 
-				if b == 0x1b {
-					return Key_Event{key = .Escape}
-				} else {
-					return Key_Event{key = .Char, char = rune(b)}
-				}
+		// Incomplete sequence. Drop the leading byte if either the buffer is
+		// full (waiting can no longer help - nothing more can be read) or we
+		// have waited long enough that a bare ESC is the best explanation.
+		buffer_full := input_buffer_len >= len(input_buffer)
+		timed_out := time.diff(last_input_time, time.now()) > 50 * time.Millisecond
+
+		if buffer_full || timed_out {
+			b := input_buffer[0]
+			copy(input_buffer[:], input_buffer[1:input_buffer_len])
+			input_buffer_len -= 1
+
+			if b == 0x1b {
+				return Key_Event{key = .Escape}
 			}
-
-			// We keep the data in the buffer for next time
+			ev, _, parsed := parse_char_event([]byte{b})
+			if parsed {
+				return ev
+			}
 			return nil
 		}
+
+		// Keep the data in the buffer for next time
+		return nil
 	}
 }

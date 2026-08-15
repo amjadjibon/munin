@@ -495,3 +495,134 @@ test_parse_sgr_mouse :: proc(t: ^testing.T) {
 		}
 	}
 }
+
+// ============================================================
+// MALFORMED SEQUENCE HANDLING (REGRESSION)
+// ============================================================
+
+@(test)
+test_parse_sgr_mouse_rejects_non_digits :: proc(t: ^testing.T) {
+	// Non-digit bytes in the numeric fields used to be run through `b - '0'`,
+	// producing arbitrary coordinates.
+	buf := to_bytes("\x1b[<AAAAAAAA;BBBBBBBB;1M")
+	_, ok := parse_sgr_mouse(buf, len(buf)).?
+	testing.expect(t, !ok, "Should reject non-digit fields")
+}
+
+@(test)
+test_parse_sgr_mouse_rejects_overlong_number :: proc(t: ^testing.T) {
+	buf := to_bytes("\x1b[<0;99999999999999999999;1M")
+	_, ok := parse_sgr_mouse(buf, len(buf)).?
+	testing.expect(t, !ok, "Should reject an out-of-range coordinate")
+}
+
+@(test)
+test_parse_sgr_mouse_zero_coordinate_clamped :: proc(t: ^testing.T) {
+	buf := to_bytes("\x1b[<0;0;0M")
+	event, ok := parse_sgr_mouse(buf, len(buf)).?
+	testing.expect(t, ok, "Should parse zero coordinates")
+	testing.expect_value(t, event.x, 0)
+	testing.expect_value(t, event.y, 0)
+}
+
+@(test)
+test_parse_unknown_csi_is_fully_consumed :: proc(t: ^testing.T) {
+	// F5 is ESC [ 1 5 ~. Consuming only the ESC left "[15~" to be delivered
+	// to the application as four literal keystrokes.
+	input := to_bytes("\x1b[15~")
+	_, consumed, ok := parse_event_from_buffer(input)
+	testing.expect(t, ok, "Should produce an event")
+	testing.expect_value(t, consumed, 5)
+}
+
+@(test)
+test_parse_bracketed_paste_marker_consumed :: proc(t: ^testing.T) {
+	input := to_bytes("\x1b[200~")
+	event, consumed, ok := parse_event_from_buffer(input)
+	testing.expect(t, ok, "Should produce an event")
+	testing.expect_value(t, consumed, 6)
+
+	if ok {
+		#partial switch e in event {
+		case Key_Event:
+			testing.expect_value(t, e.key, Key.Unknown)
+		case:
+			testing.expect(t, false, "Expected Key_Event")
+		}
+	}
+}
+
+@(test)
+test_parse_modified_arrow_key :: proc(t: ^testing.T) {
+	// Ctrl+Up: ESC [ 1 ; 5 A
+	input := to_bytes("\x1b[1;5A")
+	event, consumed, ok := parse_event_from_buffer(input)
+	testing.expect(t, ok, "Should parse modified arrow")
+	testing.expect_value(t, consumed, 6)
+
+	if ok {
+		#partial switch e in event {
+		case Key_Event:
+			testing.expect_value(t, e.key, Key.Up)
+			testing.expect_value(t, e.ctrl, true)
+			testing.expect_value(t, e.shift, false)
+		case:
+			testing.expect(t, false, "Expected Key_Event")
+		}
+	}
+}
+
+@(test)
+test_parse_ss3_arrow :: proc(t: ^testing.T) {
+	// Application cursor mode sends ESC O A for Up
+	input := to_bytes("\x1bOA")
+	event, consumed, ok := parse_event_from_buffer(input)
+	testing.expect(t, ok, "Should parse SS3 arrow")
+	testing.expect_value(t, consumed, 3)
+
+	if ok {
+		#partial switch e in event {
+		case Key_Event:
+			testing.expect_value(t, e.key, Key.Up)
+		case:
+			testing.expect(t, false, "Expected Key_Event")
+		}
+	}
+}
+
+@(test)
+test_parse_alt_char :: proc(t: ^testing.T) {
+	input := to_bytes("\x1ba")
+	event, consumed, ok := parse_event_from_buffer(input)
+	testing.expect(t, ok, "Should parse Alt+a")
+	testing.expect_value(t, consumed, 2)
+
+	if ok {
+		#partial switch e in event {
+		case Key_Event:
+			testing.expect_value(t, e.key, Key.Char)
+			testing.expect_value(t, e.char, 'a')
+			testing.expect_value(t, e.alt, true)
+		case:
+			testing.expect(t, false, "Expected Key_Event")
+		}
+	}
+}
+
+@(test)
+test_parse_ctrl_c :: proc(t: ^testing.T) {
+	input := []byte{3}
+	event, consumed, ok := parse_event_from_buffer(input)
+	testing.expect(t, ok, "Should parse Ctrl+C")
+	testing.expect_value(t, consumed, 1)
+
+	if ok {
+		#partial switch e in event {
+		case Key_Event:
+			testing.expect_value(t, e.char, 'c')
+			testing.expect_value(t, e.ctrl, true)
+		case:
+			testing.expect(t, false, "Expected Key_Event")
+		}
+	}
+}
