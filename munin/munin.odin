@@ -377,7 +377,11 @@ set_screen_mode :: proc(program: ^Program($Model, $Msg), mode: Screen_Mode) {
 // PROGRAM EXECUTION
 // ============================================================
 
-// Run the program
+// Run the program.
+//
+// Returns false if the terminal could not be put into raw mode - which is the
+// normal outcome when stdin is not a terminal - and true after a normal exit.
+// The program's buffers are released either way.
 run :: proc(
 	program: ^Program($Model, $Msg),
 	input_handler: proc() -> Maybe(Msg),
@@ -385,20 +389,23 @@ run :: proc(
 	initial_mode: Screen_Mode = .Fullscreen,
 	clear_on_exit: bool = true,
 	enable_mouse: bool = false, // Mouse tracking is opt-in to avoid terminal weirdness
-) {
+) -> (ok_run: bool) {
 	// Set initial screen mode and clear on exit option
 	program.screen_mode = initial_mode
 	program.clear_on_exit = clear_on_exit
 
-	// Set up terminal
+	// Set up terminal.
+	// On failure the program's buffers must still be released: this returns
+	// before the defers below are registered, and a failure here is the
+	// ordinary path whenever stdin is not a terminal (a pipe, cron, CI).
 	state, ok := set_raw_mode()
 	if !ok {
 		fmt.eprintln("Failed to set raw mode")
-		return
+		destroy_program(program)
+		return false
 	}
 	defer restore_mode(state)
-	defer strings.builder_destroy(&program.buffer)
-	defer strings.builder_destroy(&program.out_buffer)
+	defer destroy_program(program)
 
 	// Clear screen on exit if requested
 	defer {
@@ -574,4 +581,6 @@ run :: proc(
 		// Reset temp allocator at end of iteration
 		free_all(context.temp_allocator)
 	}
+
+	return true
 }

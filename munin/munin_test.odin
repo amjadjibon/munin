@@ -1,5 +1,6 @@
 package munin
 
+import "core:mem"
 import "core:strings"
 import "core:testing"
 
@@ -397,4 +398,35 @@ test_set_window_title_sanitizes :: proc(t: ^testing.T) {
 	set_window_title(&b, "evil\x07\x1b]52;c;cGF5bG9hZA==\x07")
 	out := strings.to_string(b)
 	testing.expect_value(t, out, "\x1b]0;evil\x07")
+}
+
+// ============================================================
+// PROGRAM LIFECYCLE (REGRESSION)
+// ============================================================
+
+@(test)
+test_run_releases_buffers_when_terminal_setup_fails :: proc(t: ^testing.T) {
+	// The test runner has no controlling terminal, so set_raw_mode() fails -
+	// the same path a program takes when stdin is a pipe, or under cron/CI.
+	// run() used to return before its cleanup defers were registered, leaking
+	// both 4KB render buffers. The tracking allocator fails this test if that
+	// regresses.
+	// Odin's test runner only *warns* about leaks, so track them here and
+	// assert.
+	track: mem.Tracking_Allocator
+	mem.tracking_allocator_init(&track, context.allocator)
+	defer mem.tracking_allocator_destroy(&track)
+
+	tracked := mem.tracking_allocator(&track)
+	program := make_program(test_init, test_update, test_view, allocator = tracked)
+
+	ok := run(&program, proc() -> Maybe(Msg) {return nil})
+
+	testing.expect(t, !ok, "run should report that it could not start")
+	testing.expectf(
+		t,
+		len(track.allocation_map) == 0,
+		"run leaked %d allocations after failing to start",
+		len(track.allocation_map),
+	)
 }
