@@ -20,6 +20,10 @@ when ODIN_OS != .Windows {
 	SIGTERM :: 15
 	SIGHUP :: 1
 
+	// The default signal disposition: a null handler pointer.
+	@(private)
+	SIG_DFL: proc "c" (_: c.int) = nil
+
 	@(default_calling_convention = "c")
 	foreign libc {
 		ioctl :: proc(fd: c.int, request: c.ulong, #c_vararg args: ..any) -> c.int ---
@@ -149,6 +153,16 @@ when ODIN_OS != .Windows {
 		posix.tcsetattr(posix.STDIN_FILENO, .TCSANOW, &t)
 		intrinsics.atomic_store(&saved_termios_valid, false)
 		set_cleanup_state(false, false)
+
+		// Hand the signals back to the default disposition. Leaving our
+		// handlers installed past the end of run() means a later SIGTERM
+		// exits through _exit() and skips whatever cleanup the application
+		// still had to do - freeing its model, flushing a log, reporting
+		// leaks - none of which run() is responsible for any more.
+		signal(SIGINT, SIG_DFL)
+		signal(SIGTERM, SIG_DFL)
+		signal(SIGHUP, SIG_DFL)
+		signal(SIGWINCH, SIG_DFL)
 	}
 
 	// Query the terminal size.

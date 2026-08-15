@@ -123,3 +123,59 @@ test_check_window_resized_windows :: proc(t: ^testing.T) {
 		testing.expect(t, !resized, "Windows should not support resize detection")
 	}
 }
+
+// ============================================================
+// SIGNAL DISPOSITION (REGRESSION)
+// ============================================================
+
+when ODIN_OS != .Windows {
+	@(test)
+	test_restore_mode_hands_signals_back_to_default :: proc(t: ^testing.T) {
+		// munin's fatal handler exits through _exit(). Leaving it installed
+		// after run() has returned means a later signal skips whatever
+		// cleanup the application still had to do.
+		//
+		// Save and restore the process-wide dispositions around the check so
+		// this test cannot disturb the test runner.
+		saved_int := signal(SIGINT, SIG_DFL)
+		saved_term := signal(SIGTERM, SIG_DFL)
+		saved_hup := signal(SIGHUP, SIG_DFL)
+		saved_winch := signal(SIGWINCH, SIG_DFL)
+		defer {
+			signal(SIGINT, saved_int)
+			signal(SIGTERM, saved_term)
+			signal(SIGHUP, saved_hup)
+			signal(SIGWINCH, saved_winch)
+		}
+
+		setup_resize_handler()
+
+		// Installed while the program is running.
+		previous := signal(SIGTERM, sigfatal_handler)
+		testing.expect(t, previous == sigfatal_handler, "run() should install a SIGTERM handler")
+
+		state: Terminal_State
+		restore_mode(state)
+
+		testing.expect(
+			t,
+			signal(SIGINT, SIG_DFL) == SIG_DFL,
+			"SIGINT should be back to the default disposition",
+		)
+		testing.expect(
+			t,
+			signal(SIGTERM, SIG_DFL) == SIG_DFL,
+			"SIGTERM should be back to the default disposition",
+		)
+		testing.expect(
+			t,
+			signal(SIGHUP, SIG_DFL) == SIG_DFL,
+			"SIGHUP should be back to the default disposition",
+		)
+		testing.expect(
+			t,
+			signal(SIGWINCH, SIG_DFL) == SIG_DFL,
+			"SIGWINCH should be back to the default disposition",
+		)
+	}
+}
