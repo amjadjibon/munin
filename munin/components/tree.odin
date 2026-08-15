@@ -90,6 +90,9 @@ draw_tree :: proc(
 	roots: []^Tree_Node,
 	selected_path: []int = nil, // Path to selected node [root_idx, child_idx, ...]
 	config: Tree_Config,
+	// Node labels are stripped of escape sequences and control bytes: a tree
+	// usually shows filenames or other data the application did not author.
+	sanitize: bool = true,
 ) -> int {
 	current_y := pos.y
 	for root, i in roots {
@@ -104,6 +107,7 @@ draw_tree :: proc(
 			0, // path_index
 			i, // current_index in path
 			config,
+			sanitize,
 		)
 		current_y += lines_drawn
 	}
@@ -123,6 +127,7 @@ draw_tree_node :: proc(
 	path_index: int,
 	current_index: int,
 	config: Tree_Config,
+	sanitize: bool,
 ) -> int {
 	if node == nil {
 		return 0
@@ -229,7 +234,7 @@ draw_tree_node :: proc(
 	}
 
 	munin.set_color(buf, label_color)
-	strings.write_string(buf, node.label)
+	strings.write_string(buf, display_text(node.label, sanitize))
 	munin.reset_style(buf)
 
 	lines_drawn += 1
@@ -255,6 +260,7 @@ draw_tree_node :: proc(
 				next_path_index,
 				i,
 				config,
+				sanitize,
 			)
 			lines_drawn += child_lines
 			current_y += child_lines
@@ -270,12 +276,13 @@ render_tree_styled :: proc(
 	selected_path: []int = nil,
 	config: Tree_Config,
 	style: munin.Style,
+	sanitize: bool = true,
 ) -> string {
 	buf := strings.builder_make()
 	defer strings.builder_destroy(&buf)
 
 	// Render tree content
-	draw_tree(&buf, {0, 0}, roots, selected_path, config)
+	draw_tree(&buf, {0, 0}, roots, selected_path, config, sanitize)
 
 	content := strings.to_string(buf)
 

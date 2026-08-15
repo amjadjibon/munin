@@ -105,9 +105,29 @@ strip_ansi :: proc(s: string) -> string {
 // crafted string can move the cursor, rewrite the window title, or drive OSC
 // 52 to write the user's clipboard.
 //
-// Returns a string allocated with `allocator` (temp arena by default).
+// Returns the input string itself when there is nothing to remove (the common
+// case, and no allocation), otherwise a string allocated with `allocator`
+// (temp arena by default).
 sanitize_display :: proc(s: string, allocator := context.temp_allocator) -> string {
 	if len(s) == 0 {
+		return s
+	}
+
+	// Fast path: this sits on the per-frame render path for every piece of
+	// text a component draws, so scan before allocating.
+	needs_work := false
+	for i in 0 ..< len(s) {
+		b := s[i]
+		if b < 0x20 && b != '\n' && b != '\t' {
+			needs_work = true
+			break
+		}
+		if b == 0x7F || b == 0xC2 {
+			needs_work = true
+			break
+		}
+	}
+	if !needs_work {
 		return s
 	}
 

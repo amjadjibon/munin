@@ -32,6 +32,8 @@ draw_list :: proc(
 	custom_marker: string = "",
 	selected_color: munin.Color = munin.Basic_Color.BrightYellow,
 	indent: int = 2,
+	// See draw_table: item text is sanitized unless you opt out.
+	sanitize: bool = true,
 ) {
 	for item, i in items {
 		current_y := pos.y + i
@@ -83,7 +85,7 @@ draw_list :: proc(
 			text_color = selected_color
 		}
 
-		munin.print_at(buf, {text_x, current_y}, item.text, text_color)
+		munin.print_at(buf, {text_x, current_y}, display_text(item.text, sanitize), text_color)
 		munin.reset_style(buf)
 	}
 }
@@ -97,6 +99,7 @@ draw_list_scrollable :: proc(
 	selected: int,
 	scroll_offset: int,
 	style: List_Style = .Bullet,
+	sanitize: bool = true,
 ) {
 	if visible_height <= 0 || len(items) == 0 {
 		return
@@ -110,7 +113,7 @@ draw_list_scrollable :: proc(
 	visible_items := items[start:end]
 	adjusted_selected := selected - start
 
-	draw_list(buf, pos, visible_items, adjusted_selected, style)
+	draw_list(buf, pos, visible_items, adjusted_selected, style, sanitize = sanitize)
 
 	// Draw scroll indicators
 	if start > 0 && pos.y > 0 {

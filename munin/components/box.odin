@@ -121,6 +121,7 @@ draw_box_titled :: proc(
 	style: Box_Style = .Single,
 	color: munin.Color = munin.Basic_Color.Reset,
 	title_color: munin.Color = munin.Basic_Color.BrightWhite,
+	sanitize: bool = true,
 ) {
 	draw_box_styled(buf, pos, width, height, style, color)
 
@@ -133,7 +134,7 @@ draw_box_titled :: proc(
 		// Shares the table's truncation helper: the open-coded version here
 		// re-encoded each decoded rune, which overshoots the end of the string
 		// on malformed UTF-8 and slices out of bounds.
-		title_display := truncate_visible_width(title, max_title_width)
+		title_display := truncate_visible_width(display_text(title, sanitize), max_title_width)
 
 		munin.move_cursor(buf, {title_x, pos.y})
 		if !munin.is_color_reset(color) {

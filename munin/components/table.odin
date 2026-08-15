@@ -28,6 +28,12 @@ draw_table :: proc(
 	rows: [][]string,
 	header_color: munin.Color = munin.Basic_Color.BrightCyan,
 	border_color: munin.Color = munin.Basic_Color.White,
+	// Cell and header text is stripped of escape sequences and control
+	// bytes before it is drawn. Table data usually comes from somewhere the
+	// application did not author - a database, a log, an API - and an
+	// unfiltered escape sequence lets that data drive the terminal.
+	// Pass false only for cells your own code composed.
+	sanitize: bool = true,
 ) {
 	if len(columns) == 0 {
 		return
@@ -65,7 +71,7 @@ draw_table :: proc(
 		munin.reset_style(buf)
 		munin.set_bold(buf)
 		munin.set_color(buf, header_color)
-		padded := pad_string(col.title, col.width, col.align)
+		padded := pad_string(display_text(col.title, sanitize), col.width, col.align)
 		strings.write_string(buf, padded)
 		munin.reset_style(buf)
 		munin.set_color(buf, border_color)
@@ -98,7 +104,7 @@ draw_table :: proc(
 		for col, i in columns {
 			munin.reset_style(buf)
 			cell := i < len(row) ? row[i] : ""
-			padded := pad_string(cell, col.width, col.align)
+			padded := pad_string(display_text(cell, sanitize), col.width, col.align)
 			strings.write_string(buf, padded)
 			munin.set_color(buf, border_color)
 			strings.write_string(buf, "│")
