@@ -61,4 +61,14 @@ when ODIN_OS == .Windows {
 	setup_resize_handler :: proc() {
 		// Not implemented for Windows yet
 	}
+
+	// No-op on Windows: there is no signal handler needing to know what to
+	// undo. Kept so run() can call it unconditionally.
+	@(private)
+	set_cleanup_state :: proc(mouse: bool, altscreen: bool) {
+	}
+
+	@(private)
+	set_cleanup_altscreen :: proc(on: bool) {
+	}
 }
