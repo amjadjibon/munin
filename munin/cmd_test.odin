@@ -224,13 +224,31 @@ cmd_update :: proc(
 cmd_view :: proc(model: Cmd_Model, buf: ^strings.Builder) {
 }
 
-@(test)
-test_make_program_with_cmds_selects_the_command_update :: proc(t: ^testing.T) {
-	program := make_program(cmd_init, cmd_update, cmd_view)
-	defer destroy_program(&program)
+@(private = "file")
+plain_update :: proc(msg: Test_Msg, model: Cmd_Model) -> (Cmd_Model, bool) {
+	m := model
+	m.ticks += 1
+	return m, msg == .Done
+}
 
-	testing.expect(t, program.update_cmd != nil, "the command update should be installed")
-	testing.expect(t, program.update == nil, "the plain update should be unset")
+@(test)
+test_make_program_picks_the_update_variant_from_the_signature :: proc(t: ^testing.T) {
+	// One field, two shapes: the constructor stores whichever it was handed.
+	with_cmds := make_program(cmd_init, cmd_update, cmd_view)
+	defer destroy_program(&with_cmds)
+
+	_, is_cmd := with_cmds.update.(proc(
+			msg: Test_Msg,
+			model: Cmd_Model,
+			cmds: ^Cmd_Context(Test_Msg),
+		) -> Cmd_Model)
+	testing.expect(t, is_cmd, "should hold the command update")
+
+	plain := make_program(cmd_init, plain_update, cmd_view)
+	defer destroy_program(&plain)
+
+	_, is_plain := plain.update.(proc(msg: Test_Msg, model: Cmd_Model) -> (Cmd_Model, bool))
+	testing.expect(t, is_plain, "should hold the plain update")
 }
 
 @(test)
@@ -239,12 +257,35 @@ test_command_update_drives_the_model_and_quits :: proc(t: ^testing.T) {
 	program := make_program(cmd_init, cmd_update, cmd_view)
 	defer destroy_program(&program)
 
+	update, ok := program.update.(proc(
+			msg: Test_Msg,
+			model: Cmd_Model,
+			cmds: ^Cmd_Context(Test_Msg),
+		) -> Cmd_Model)
+	testing.expect(t, ok, "the command update should be installed")
+
 	for _ in 0 ..< 3 {
-		program.model = program.update_cmd(.Tick, program.model, &program.cmds)
+		program.model = update(Test_Msg.Tick, program.model, &program.cmds)
 	}
 	testing.expect_value(t, program.model.ticks, 3)
 	testing.expect_value(t, len(program.cmds.queue), 1)
 
-	program.model = program.update_cmd(program.cmds.queue[0], program.model, &program.cmds)
+	program.model = update(program.cmds.queue[0], program.model, &program.cmds)
 	testing.expect(t, program.cmds.quit, "Done should have asked the program to stop")
+}
+
+@(test)
+test_plain_update_still_reports_quit_through_its_bool :: proc(t: ^testing.T) {
+	program := make_program(cmd_init, plain_update, cmd_view)
+	defer destroy_program(&program)
+
+	update, ok := program.update.(proc(msg: Test_Msg, model: Cmd_Model) -> (Cmd_Model, bool))
+	testing.expect(t, ok, "the plain update should be installed")
+
+	model, quit := update(Test_Msg.Tick, program.model)
+	testing.expect_value(t, model.ticks, 1)
+	testing.expect(t, !quit, "Tick does not quit")
+
+	_, quit_now := update(Test_Msg.Done, model)
+	testing.expect(t, quit_now, "Done quits")
 }

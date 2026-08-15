@@ -39,17 +39,24 @@ Render_Mode :: enum {
 	Cell_Diff,
 }
 
+// The two shapes an update function may take.
+//
+// The second one receives a command context, so it can schedule messages,
+// repeat them, and quit (see cmd.odin) instead of returning a quit flag.
+// Both are dispatched through the same field; make_program picks the variant
+// from the signature it was handed.
+Update_Proc :: union($Model, $Msg: typeid) {
+	proc(msg: Msg, model: Model) -> (Model, bool),
+	proc(msg: Msg, model: Model, cmds: ^Cmd_Context(Msg)) -> Model,
+}
+
 // Program represents a TUI application
 Program :: struct($Model, $Msg: typeid) {
 	model:           Model,
 	running:         bool,
 	screen_mode:     Screen_Mode,
 	init:            proc() -> Model,
-	update:          proc(msg: Msg, model: Model) -> (Model, bool),
-	// Alternative update that receives a command context: it can schedule
-	// messages, repeat them, and quit. When set, it is used instead of
-	// `update`. See cmd.odin.
-	update_cmd:      proc(msg: Msg, model: Model, cmds: ^Cmd_Context(Msg)) -> Model,
+	update:          Update_Proc(Model, Msg),
 	view:            proc(model: Model, buf: ^strings.Builder),
 	subscriptions:   Maybe(proc(model: Model) -> Maybe(Msg)),
 	buffer:          strings.Builder,
@@ -392,7 +399,7 @@ make_program_with_cmds :: proc(
 		running = true,
 		screen_mode = .Fullscreen,
 		init = init,
-		update_cmd = update,
+		update = update,
 		view = view,
 		subscriptions = nil,
 		buffer = buffer,
@@ -557,19 +564,22 @@ run :: proc(
 			needs_redraw = true
 		}
 
-		// Deliver one message to the application.
+		// Deliver one message to the application. Both update shapes end up
+		// here; the only difference is how they say "stop".
 		dispatch :: proc(program: ^Program(Model, Msg), msg: Msg) {
-			if program.update_cmd != nil {
-				program.model = program.update_cmd(msg, program.model, &program.cmds)
+			switch update in program.update {
+			case proc(msg: Msg, model: Model) -> (Model, bool):
+				new_model, should_quit := update(msg, program.model)
+				program.model = new_model
+				if should_quit {
+					program.running = false
+				}
+
+			case proc(msg: Msg, model: Model, cmds: ^Cmd_Context(Msg)) -> Model:
+				program.model = update(msg, program.model, &program.cmds)
 				if program.cmds.quit {
 					program.running = false
 				}
-				return
-			}
-			new_model, should_quit := program.update(msg, program.model)
-			program.model = new_model
-			if should_quit {
-				program.running = false
 			}
 		}
 

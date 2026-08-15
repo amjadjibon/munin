@@ -66,10 +66,15 @@ docs/                      # Component documentation (per-component .md files)
 The framework follows the **Elm Architecture**:
 
 1. **Model** - Application state (user-defined struct)
-2. **Update** - Pure function that transforms state, in one of two forms:
+2. **Update** - Pure function that transforms state. `Program.update` is a
+   single field of type `Update_Proc(Model, Msg)`, a union of the two accepted
+   shapes:
    - `proc(msg: Msg, model: Model) -> (Model, bool)` - the bool requests quit
    - `proc(msg: Msg, model: Model, cmds: ^Cmd_Context(Msg)) -> Model` - can also
      schedule work (see Commands below)
+
+   Both are dispatched from one place in the run loop; the only difference is
+   how they say "stop".
 3. **View** - Pure function: `proc(model: Model, buf: ^strings.Builder)` that renders to terminal
 
 Programs are created with `make_program(init, update, view)` - which picks the
