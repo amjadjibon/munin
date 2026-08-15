@@ -289,5 +289,28 @@ def test_narrow_terminal_does_not_crash():
         assert app.quit() == 0
 
 
+@e2e
+def test_identical_frames_are_not_retransmitted():
+    # Every redraw retransmits the whole view, so an event that does not
+    # change anything used to cost a full frame of terminal traffic.
+    with App("mouse", cols=80, rows=24) as app:
+        app.wait_for("Mouse Position")
+
+        # One event that does change the view: costs a frame.
+        app.send("\x1b[<35;40;12M")
+        app.wait_quiet(idle=0.2)
+
+        base = len(app.output())
+        for _ in range(20):
+            app.send("\x1b[<35;40;12M")  # same position, identical view
+            time.sleep(0.02)
+        app.wait_quiet(idle=0.3)
+        repeated = len(app.output()) - base
+
+        assert repeated == 0, f"{repeated} bytes written for 20 no-op redraws"
+
+        assert app.quit() == 0
+
+
 if __name__ == "__main__":
     main()

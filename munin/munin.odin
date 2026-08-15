@@ -38,6 +38,7 @@ Program :: struct($Model, $Msg: typeid) {
 	subscriptions:   Maybe(proc(model: Model) -> Maybe(Msg)),
 	buffer:          strings.Builder,
 	out_buffer:      strings.Builder, // Frame assembled here so it can be written in one syscall
+	last_frame:      strings.Builder, // Previous frame, to skip identical redraws
 	allocator:       mem.Allocator,
 	last_line_count: int, // Track number of lines rendered (for inline mode)
 	clear_on_exit:   bool, // Whether to clear screen on exit
@@ -290,6 +291,8 @@ make_program_without_subs :: proc(
 		strings.builder_make_len_cap(0, 4096, allocator) or_else strings.builder_make(allocator)
 	out_buffer :=
 		strings.builder_make_len_cap(0, 4096, allocator) or_else strings.builder_make(allocator)
+	last_frame :=
+		strings.builder_make_len_cap(0, 4096, allocator) or_else strings.builder_make(allocator)
 	return Program(Model, Msg) {
 		model = init(),
 		running = true,
@@ -300,6 +303,7 @@ make_program_without_subs :: proc(
 		subscriptions = nil,
 		buffer = buffer,
 		out_buffer = out_buffer,
+		last_frame = last_frame,
 		allocator = allocator,
 	}
 }
@@ -316,6 +320,8 @@ make_program_with_subs :: proc(
 		strings.builder_make_len_cap(0, 4096, allocator) or_else strings.builder_make(allocator)
 	out_buffer :=
 		strings.builder_make_len_cap(0, 4096, allocator) or_else strings.builder_make(allocator)
+	last_frame :=
+		strings.builder_make_len_cap(0, 4096, allocator) or_else strings.builder_make(allocator)
 	return Program(Model, Msg) {
 		model = init(),
 		running = true,
@@ -326,6 +332,7 @@ make_program_with_subs :: proc(
 		subscriptions = subscriptions,
 		buffer = buffer,
 		out_buffer = out_buffer,
+		last_frame = last_frame,
 		allocator = allocator,
 	}
 }
@@ -336,6 +343,7 @@ make_program_with_subs :: proc(
 destroy_program :: proc(program: ^Program($Model, $Msg)) {
 	strings.builder_destroy(&program.buffer)
 	strings.builder_destroy(&program.out_buffer)
+	strings.builder_destroy(&program.last_frame)
 }
 
 // ============================================================
@@ -529,13 +537,21 @@ run :: proc(
 			// Get output
 			output := strings.to_string(program.buffer)
 
+			// Nothing changed since the last frame: an event that does not
+			// alter the view (mouse motion, a key the app ignores, a resize
+			// back to the same size) costs no terminal traffic at all.
+			// Without this every such event retransmits the whole view.
+			unchanged := output == strings.to_string(program.last_frame)
+
 			// Assemble the whole frame - control sequences included - and
 			// write it with a single syscall, so the terminal never sees a
 			// half-updated screen between writes.
 			strings.builder_reset(&program.out_buffer)
 
 			// Handle inline mode rendering differently
-			if program.screen_mode == .Inline {
+			if unchanged {
+				// Skip: nothing to send.
+			} else if program.screen_mode == .Inline {
 				// Count lines in new output
 				new_line_count := count_lines(output)
 
@@ -557,7 +573,12 @@ run :: proc(
 				strings.write_string(&program.out_buffer, output)
 			}
 
-			term_write(strings.to_string(program.out_buffer))
+			if !unchanged {
+				term_write(strings.to_string(program.out_buffer))
+
+				strings.builder_reset(&program.last_frame)
+				strings.write_string(&program.last_frame, output)
+			}
 
 			// Reset redraw flag and update last frame time
 			needs_redraw = false
